@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag } from 'lucide-react'
+import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import QuickOPayPalCheckout from './paypal-button'
 
@@ -75,8 +75,12 @@ export function AgentPrompt() {
   const [listening, setListening] = useState(false)
   const [messages, setMessages] = useState<Message[]>(history)
   const [busy, setBusy] = useState(false)
-  const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout'>('size')
+  
+  // Custom checkout states
+  const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout' | 'ordered'>('size')
   const [selectedSize, setSelectedSize] = useState({ label: 'Venti', price: '6.45' })
+  const [priceMatchStep, setPriceMatchStep] = useState<'initial' | 'checkout' | 'ordered'>('initial')
+
   const streamRef = useRef<HTMLOListElement>(null)
   const idRef = useRef(history.length)
   const requestRef = useRef(0)
@@ -118,24 +122,26 @@ export function AgentPrompt() {
     setValue('')
     setBusy(true)
 
-    const isStarbucks = command.toLowerCase().includes('starbucks') || command.toLowerCase().includes('latte')
+    const lowerCmd = command.toLowerCase()
 
-    setMessages((prev: Message[]) => [
-      ...prev,
-      { id: userId, role: 'user', text: command, time },
-      {
-        id: agentId,
-        role: 'agent',
-        text: isStarbucks
-          ? 'Preparing your Starbucks order details...'
-          : 'Searching live prices and deals...',
-        time,
-        pending: true,
-        customOrderType: isStarbucks ? 'starbucks' : undefined,
-      },
-    ])
+    // Intent Matching
+    const isStarbucks = lowerCmd.includes('starbucks') || lowerCmd.includes('latte') || lowerCmd.includes('coffee')
+    const isOrderFollowUp = lowerCmd.includes('order that') || lowerCmd.includes('buy that') || lowerCmd.includes('okay order') || lowerCmd.includes('checkout')
 
     if (isStarbucks) {
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: userId, role: 'user', text: command, time },
+        {
+          id: agentId,
+          role: 'agent',
+          text: 'Preparing your Starbucks order details...',
+          time,
+          pending: true,
+          customOrderType: 'starbucks',
+        },
+      ])
+
       setTimeout(() => {
         setMessages((prev: Message[]) =>
           prev.map((m: Message) =>
@@ -152,6 +158,38 @@ export function AgentPrompt() {
       }, 1000)
       return
     }
+
+    if (isOrderFollowUp) {
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: userId, role: 'user', text: command, time },
+        {
+          id: agentId,
+          role: 'agent',
+          text: 'Found best matched price item ($399.00). Ready for 1-Click PayPal Checkout:',
+          time,
+          pending: false,
+          customOrderType: 'price-match',
+          itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
+          amount: '399.00',
+        },
+      ])
+      setBusy(false)
+      return
+    }
+
+    // Default API path
+    setMessages((prev: Message[]) => [
+      ...prev,
+      { id: userId, role: 'user', text: command, time },
+      {
+        id: agentId,
+        role: 'agent',
+        text: 'Searching live prices and deals...',
+        time,
+        pending: true,
+      },
+    ])
 
     try {
       const res = await fetch('/api/agent', {
@@ -249,17 +287,40 @@ export function AgentPrompt() {
                 <span>{m.text}</span>
               </p>
 
-              {/* Price Match Quick PayPal Checkout */}
+              {/* Price Match Flow */}
               {m.customOrderType === 'price-match' && (
-                <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3 space-y-2">
-                  <div>
-                    <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                    <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
-                  </div>
-                  <QuickOPayPalCheckout
-                    amount={m.amount || '399.00'}
-                    itemTitle={m.itemTitle || 'GeForce RTX 4060 Ti'}
-                  />
+                <div className="mt-3 rounded-2xl border border-primary/30 bg-background/60 p-3 space-y-3">
+                  {priceMatchStep === 'initial' ? (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
+                        <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPriceMatchStep('checkout')}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
+                      >
+                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
+                      </button>
+                    </div>
+                  ) : priceMatchStep === 'checkout' ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span>{m.itemTitle}</span>
+                        <span className="text-primary">$399.00</span>
+                      </div>
+                      <QuickOPayPalCheckout
+                        amount={m.amount || '399.00'}
+                        itemTitle={m.itemTitle || 'GeForce RTX 4060 Ti'}
+                        onSuccess={() => setPriceMatchStep('ordered')}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
+                      <CheckCircle2 className="size-4" /> Ordered! Confirmation sent via PayPal.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -298,7 +359,7 @@ export function AgentPrompt() {
                         <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
                       </button>
                     </div>
-                  ) : (
+                  ) : starbucksStep === 'checkout' ? (
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-xs font-semibold">
                         <span>Starbucks Pumpkin Spice Latte ({selectedSize.label})</span>
@@ -307,8 +368,12 @@ export function AgentPrompt() {
                       <QuickOPayPalCheckout
                         amount={selectedSize.price}
                         itemTitle={`Starbucks Pumpkin Spice Latte (${selectedSize.label})`}
-                        onSuccess={() => setStarbucksStep('size')}
+                        onSuccess={() => setStarbucksStep('ordered')}
                       />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
+                      <CheckCircle2 className="size-4" /> Ordered! Starbucks is preparing your {selectedSize.label} Latte.
                     </div>
                   )}
                 </div>
