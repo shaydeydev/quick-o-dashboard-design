@@ -119,8 +119,7 @@ export function BottomNav() {
                   </div>
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-                      <div className="text-sm font-semibold text-foreground">NVIDIA GeForce Now</div>
-                      <div className="text-xs text-muted-foreground">$9.99/mo · Priority 2 (Protected)</div>
+
                     </div>
                     <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Active</span>
                   </div>

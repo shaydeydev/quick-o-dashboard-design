@@ -10,14 +10,13 @@ const suggestions = ['Reorder coffee beans', 'Find cheaper RTX card', 'Pause Net
 const dashboardContext = {
   paypalBalance: 30,
   productInView: {
-    name: 'NVIDIA RTX Graphics Card',
-    merchants: { Amazon: 694, Newegg: 649 },
+    name: 'GeForce RTX 4060 Ti',
+    merchants: { Amazon: 449, Newegg: 399 },
   },
   subscriptions: [
     { name: 'Amazon Prime', price: 14, priority: 1, paused: false },
-    { name: 'NVIDIA GeForce Now', price: 10, priority: 2, paused: false },
-    { name: 'Spotify', price: 11, priority: 3, paused: false },
-    { name: 'Netflix', price: 15, priority: 4, paused: true },
+    { name: 'Spotify', price: 11, priority: 2, paused: false },
+    { name: 'Netflix', price: 15, priority: 3, paused: true },
   ],
 }
 
@@ -44,24 +43,26 @@ type Message = {
   customOrderType?: 'starbucks' | 'price-match'
   itemTitle?: string
   amount?: string
+  itemImage?: string
 }
 
 const history: Message[] = [
-  { id: 1, role: 'user', text: 'Find me the best price on an NVIDIA RTX graphics card.', time: '9:41 AM' },
+  { id: 1, role: 'user', text: 'Find me the best price on a GeForce RTX 4060 Ti.', time: '9:41 AM' },
   {
     id: 2,
     role: 'agent',
-    text: 'Scanned Amazon and Newegg. Newegg has it for $649, which is $45 less than Amazon. Ready for 1-Click PayPal Checkout.',
+    text: 'Scanned Amazon and Newegg. Newegg has it for $399, which is $50 less than Amazon. Ready for 1-Click PayPal Checkout.',
     time: '9:41 AM',
     customOrderType: 'price-match',
-    itemTitle: 'NVIDIA RTX Graphics Card (Newegg)',
-    amount: '649.00',
+    itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
+    amount: '399.00',
+    itemImage: '/rtx4060ti.png', // Image path inside public/ directory
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
     id: 4,
     role: 'agent',
-    text: 'Done. Netflix (Priority 4) is paused. Amazon Prime and GeForce Now are protected — $24.00 of your $30.00 balance is covered.',
+    text: 'Done. Netflix (Priority 3) is paused. Amazon Prime stays active — $14.00 of your $30.00 balance is covered.',
     time: '9:43 AM',
   },
 ]
@@ -250,14 +251,25 @@ export function AgentPrompt() {
                 <span>{m.text}</span>
               </p>
 
-              {/* Price Match Quick PayPal Checkout */}
+              {/* Price Match Quick PayPal Checkout with Image */}
               {m.customOrderType === 'price-match' && (
-                <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3">
-                  <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                  <div className="text-[11px] text-emerald-400">$649.00 · Price Matched ($45 Savings)</div>
+                <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    {m.itemImage && (
+                      <img
+                        src={m.itemImage}
+                        alt={m.itemTitle || 'Product thumbnail'}
+                        className="size-12 rounded-lg object-cover border border-white/10 bg-white/5"
+                      />
+                    )}
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
+                      <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
+                    </div>
+                  </div>
                   <QuickOPayPalCheckout
-                    amount={m.amount || '649.00'}
-                    itemTitle={m.itemTitle || 'NVIDIA RTX Graphics Card'}
+                    amount={m.amount || '399.00'}
+                    itemTitle={m.itemTitle || 'GeForce RTX 4060 Ti'}
                   />
                 </div>
               )}
