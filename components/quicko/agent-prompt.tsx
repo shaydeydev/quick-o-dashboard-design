@@ -40,7 +40,7 @@ type Message = {
   pending?: boolean
   payload?: AgentPayload
   error?: string
-  customOrderType?: 'starbucks' | 'price-match'
+  customOrderType?: 'starbucks' | 'price-match' | 'airpods'
   itemTitle?: string
   amount?: string
 }
@@ -80,6 +80,7 @@ export function AgentPrompt() {
   const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout' | 'ordered'>('size')
   const [selectedSize, setSelectedSize] = useState({ label: 'Venti', price: '6.45' })
   const [priceMatchStep, setPriceMatchStep] = useState<'initial' | 'checkout' | 'ordered'>('initial')
+  const [airpodsStep, setAirpodsStep] = useState<'initial' | 'checkout' | 'ordered'>('initial')
 
   const streamRef = useRef<HTMLOListElement>(null)
   const idRef = useRef(history.length)
@@ -126,6 +127,7 @@ export function AgentPrompt() {
 
     // Intent Matching
     const isStarbucks = lowerCmd.includes('starbucks') || lowerCmd.includes('latte') || lowerCmd.includes('coffee')
+    const isAirpodsQuery = lowerCmd.includes('airpods')
     const isOrderFollowUp = lowerCmd.includes('order') || lowerCmd.includes('buy') || lowerCmd.includes('checkout')
 
     if (isStarbucks) {
@@ -159,8 +161,26 @@ export function AgentPrompt() {
       return
     }
 
-    // If it's an order follow-up, check if they specified AirPods or something else dynamically
-    if (isOrderFollowUp && (lowerCmd.includes('airpods') || lowerCmd.includes('apple'))) {
+    if (isAirpodsQuery && !isOrderFollowUp) {
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: userId, role: 'user', text: command, time },
+        {
+          id: agentId,
+          role: 'agent',
+          text: 'Current deals show AirPods Pro 2 cheapest on Amazon at $159.99, while Best Buy and Walmart list them around $169.99. Savings of about $10 (~6%) if you buy from Amazon.',
+          time,
+          pending: false,
+          customOrderType: 'airpods',
+          itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
+          amount: '159.99',
+        },
+      ])
+      setBusy(false)
+      return
+    }
+
+    if (isOrderFollowUp && (lowerCmd.includes('airpods') || lowerCmd.includes('amazon') || airpodsStep !== 'initial')) {
       setMessages((prev: Message[]) => [
         ...prev,
         { id: userId, role: 'user', text: command, time },
@@ -170,7 +190,7 @@ export function AgentPrompt() {
           text: 'Found best verified price for AirPods Pro 2 on Amazon ($159.99). Ready for 1-Click PayPal Checkout:',
           time,
           pending: false,
-          customOrderType: 'price-match',
+          customOrderType: 'airpods',
           itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
           amount: '159.99',
         },
@@ -198,7 +218,7 @@ export function AgentPrompt() {
       return
     }
 
-    // Default API path for general queries (like "Compare airpods prices")
+    // Default API path for other general queries
     setMessages((prev: Message[]) => [
       ...prev,
       { id: userId, role: 'user', text: command, time },
@@ -210,28 +230,6 @@ export function AgentPrompt() {
         pending: true,
       },
     ])
-
-    // Specific handler if they asked to compare airpods
-    if (lowerCmd.includes('airpods')) {
-      setTimeout(() => {
-        setMessages((prev: Message[]) =>
-          prev.map((m: Message) =>
-            m.id === agentId
-              ? {
-                  ...m,
-                  pending: false,
-                  text: 'Current deals show AirPods Pro 2 cheapest on Amazon at $159.99, while Best Buy and Walmart list them around $169.99. Savings of about $10 (~6%) if you buy from Amazon.',
-                  customOrderType: 'price-match',
-                  itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
-                  amount: '159.99',
-                }
-              : m,
-          ),
-        )
-        setBusy(false)
-      }, 1000)
-      return
-    }
 
     try {
       const res = await fetch('/api/agent', {
@@ -329,14 +327,14 @@ export function AgentPrompt() {
                 <span>{m.text}</span>
               </p>
 
-              {/* Price Match Flow */}
+              {/* Price Match Flow (RTX Card) */}
               {m.customOrderType === 'price-match' && (
                 <div className="mt-3 rounded-2xl border border-primary/30 bg-background/60 p-3 space-y-3">
                   {priceMatchStep === 'initial' ? (
                     <div className="space-y-2">
                       <div>
                         <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                        <div className="text-[11px] text-emerald-400">${m.amount || '399.00'} · Best Verified Price</div>
+                        <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
                       </div>
                       <button
                         type="button"
@@ -350,10 +348,10 @@ export function AgentPrompt() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-xs font-semibold">
                         <span>{m.itemTitle}</span>
-                        <span className="text-primary">${m.amount || '399.00'}</span>
+                        <span className="text-primary">$399.00</span>
                       </div>
                       <QuickOPayPalCheckout
-                        amount={m.amount || '399.00'}
+                        amount="399.00"
                         itemTitle={m.itemTitle || 'GeForce RTX 4060 Ti'}
                         onSuccess={() => setPriceMatchStep('ordered')}
                       />
@@ -361,6 +359,43 @@ export function AgentPrompt() {
                   ) : (
                     <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
                       <CheckCircle2 className="size-4" /> Ordered! Confirmation sent via PayPal.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AirPods Flow */}
+              {m.customOrderType === 'airpods' && (
+                <div className="mt-3 rounded-2xl border border-primary/30 bg-background/60 p-3 space-y-3">
+                  {airpodsStep === 'initial' ? (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
+                        <div className="text-[11px] text-emerald-400">$159.99 · Lowest Verified Price (~6% Savings)</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAirpodsStep('checkout')}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
+                      >
+                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
+                      </button>
+                    </div>
+                  ) : airpodsStep === 'checkout' ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span>{m.itemTitle}</span>
+                        <span className="text-primary">$159.99</span>
+                      </div>
+                      <QuickOPayPalCheckout
+                        amount="159.99"
+                        itemTitle={m.itemTitle || 'Apple AirPods Pro (2nd Gen)'}
+                        onSuccess={() => setAirpodsStep('ordered')}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
+                      <CheckCircle2 className="size-4" /> Ordered! AirPods Pro 2 ordered successfully via PayPal.
                     </div>
                   )}
                 </div>
