@@ -56,7 +56,7 @@ const history: Message[] = [
     customOrderType: 'price-match',
     itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
     amount: '399.00',
-    itemImage: '/rtx4060ti.png', // Image path inside public/ directory
+    itemImage: '/rtx4060ti.jpg', // Image path inside public/ directory
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
