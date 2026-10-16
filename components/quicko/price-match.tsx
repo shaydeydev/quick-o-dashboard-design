@@ -1,5 +1,6 @@
 'use client'
 
+import QuickOPayPalCheckout from "./paypal-button";
 import { useState } from 'react'
 import Image from 'next/image'
 import { Check, Headphones, Loader2, TrendingDown } from 'lucide-react'
@@ -82,11 +83,13 @@ src="/images/sony-xm5.jpg"
           )}
         >
           {status === 'idle' && (
-            <>
-              <PayPalMark />
-              1-Click PayPal Checkout
-            </>
-          )}
+             <div className="w-full mt-2">
+              <QuickOPayPalCheckout 
+               amount="329.00" 
+               itemTitle="Sony WH-1000XM5 Headphones" 
+             />
+           </div>
+         )}
           {status === 'processing' && (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
