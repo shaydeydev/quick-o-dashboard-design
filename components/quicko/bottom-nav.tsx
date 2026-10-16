@@ -66,7 +66,7 @@ export function BottomNav() {
 
       {/* Interactive Bottom Sheet Modals */}
       {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-md sm:items-center">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 p-4 backdrop-blur-md sm:items-center">
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4">
             <button
               onClick={() => {
