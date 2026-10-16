@@ -5,18 +5,19 @@ import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import QuickOPayPalCheckout from './paypal-button'
 
-const suggestions = ['Reorder coffee beans', 'Find cheaper AirPods', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
+const suggestions = ['Reorder coffee beans', 'Find cheaper RTX card', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
 
 const dashboardContext = {
   paypalBalance: 30,
   productInView: {
-    name: 'Sony WH-1000XM5 Headphones',
-    merchants: { Amazon: 348, Walmart: 329 },
+    name: 'NVIDIA RTX Graphics Card',
+    merchants: { Amazon: 694, Newegg: 649 },
   },
   subscriptions: [
     { name: 'Amazon Prime', price: 14, priority: 1, paused: false },
-    { name: 'Spotify', price: 11, priority: 2, paused: false },
-    { name: 'Netflix', price: 15, priority: 3, paused: true },
+    { name: 'NVIDIA GeForce Now', price: 10, priority: 2, paused: false },
+    { name: 'Spotify', price: 11, priority: 3, paused: false },
+    { name: 'Netflix', price: 15, priority: 4, paused: true },
   ],
 }
 
@@ -46,21 +47,21 @@ type Message = {
 }
 
 const history: Message[] = [
-  { id: 1, role: 'user', text: 'Find me the best price on Sony XM5 headphones.', time: '9:41 AM' },
+  { id: 1, role: 'user', text: 'Find me the best price on an NVIDIA RTX graphics card.', time: '9:41 AM' },
   {
     id: 2,
     role: 'agent',
-    text: 'Scanned Amazon and Walmart. Walmart has them for $329, which is $19 less than Amazon. Ready for 1-Click PayPal Checkout.',
+    text: 'Scanned Amazon and Newegg. Newegg has it for $649, which is $45 less than Amazon. Ready for 1-Click PayPal Checkout.',
     time: '9:41 AM',
     customOrderType: 'price-match',
-    itemTitle: 'Sony WH-1000XM5 Headphones (Walmart)',
-    amount: '329.00',
+    itemTitle: 'NVIDIA RTX Graphics Card (Newegg)',
+    amount: '649.00',
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
     id: 4,
     role: 'agent',
-    text: 'Done. Netflix (Priority 3) is paused. Prime and Spotify stay active — $25.00 of your $30.00 balance is covered.',
+    text: 'Done. Netflix (Priority 4) is paused. Amazon Prime and GeForce Now are protected — $24.00 of your $30.00 balance is covered.',
     time: '9:43 AM',
   },
 ]
@@ -253,10 +254,10 @@ export function AgentPrompt() {
               {m.customOrderType === 'price-match' && (
                 <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3">
                   <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                  <div className="text-[11px] text-emerald-400">$329.00 · Price Matched ($19 Savings)</div>
+                  <div className="text-[11px] text-emerald-400">$649.00 · Price Matched ($45 Savings)</div>
                   <QuickOPayPalCheckout
-                    amount={m.amount || '329.00'}
-                    itemTitle={m.itemTitle || 'Sony Headphones'}
+                    amount={m.amount || '649.00'}
+                    itemTitle={m.itemTitle || 'NVIDIA RTX Graphics Card'}
                   />
                 </div>
               )}

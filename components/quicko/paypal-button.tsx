@@ -21,11 +21,11 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 overflow-hidden rounded-2xl relative bg-transparent pb-1">
+      <div className="w-full mt-3 overflow-hidden rounded-2xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner">
         <PayPalButtons
           style={{ 
             layout: "horizontal", 
-            height: 42, 
+            height: 40, 
             color: "blue", 
             shape: "pill",
             tagline: false,

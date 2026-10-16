@@ -64,9 +64,9 @@ export function BottomNav() {
         </ul>
       </nav>
 
-      {/* Interactive Bottom Sheet Modals */}
+      {/* Interactive Bottom Sheet Modals with z-[9999] */}
       {activeModal && (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 p-4 backdrop-blur-md sm:items-center">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center">
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4">
             <button
               onClick={() => {
@@ -87,8 +87,8 @@ export function BottomNav() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-                      <div className="text-sm font-semibold text-foreground">Sony WH-1000XM5 Headphones</div>
-                      <div className="text-xs text-emerald-400">$329.00 · Price Matched & Paid via PayPal</div>
+                      <div className="text-sm font-semibold text-foreground">NVIDIA RTX Graphics Card</div>
+                      <div className="text-xs text-emerald-400">$649.00 · Price Matched & Paid via PayPal</div>
                     </div>
                     <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Processing</span>
                   </div>
@@ -103,24 +103,31 @@ export function BottomNav() {
               </div>
             )}
 
-            {/* Subs Tab View */}
+            {/* Subs Tab View (Updated with Amazon Prime & NVIDIA GeForce Now) */}
             {activeModal === 'Subs' && (
               <div>
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-                  <Repeat className="size-5 text-primary" /> Active Subscriptions
+                  <Repeat className="size-5 text-primary" /> Subscription Priority Guard
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-                      <div className="text-sm font-semibold text-foreground">Spotify Premium</div>
-                      <div className="text-xs text-muted-foreground">$10.99/mo · Next billing Oct 28</div>
+                      <div className="text-sm font-semibold text-foreground">Amazon Prime</div>
+                      <div className="text-xs text-muted-foreground">$14.00/mo · Priority 1 (Protected)</div>
                     </div>
-                    <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-medium text-purple-300">Active</span>
+                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Active</span>
                   </div>
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-                      <div className="text-sm font-semibold text-foreground">Netflix Standard 4K</div>
-                      <div className="text-xs text-muted-foreground">$15.49/mo · Auto-negotiated 15% off</div>
+                      <div className="text-sm font-semibold text-foreground">NVIDIA GeForce Now</div>
+                      <div className="text-xs text-muted-foreground">$9.99/mo · Priority 2 (Protected)</div>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Active</span>
+                  </div>
+                  <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Spotify Premium</div>
+                      <div className="text-xs text-muted-foreground">$10.99/mo · Priority 3</div>
                     </div>
                     <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-medium text-purple-300">Active</span>
                   </div>
@@ -168,11 +175,11 @@ export function BottomNav() {
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                     <div className="text-sm font-semibold text-emerald-400">Price Drop Alert!</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Sony WH-1000XM5 fell by $19.00 on Walmart. 1-Click Price Match ready.</div>
+                    <div className="mt-1 text-xs text-muted-foreground">NVIDIA RTX Graphics Card fell by $45.00. 1-Click Price Match ready.</div>
                   </div>
                   <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-4">
                     <div className="text-sm font-semibold text-purple-300">Upcoming Renewal</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Spotify Premium ($10.99) renews in 12 days. QuickO can auto-negotiate a renewal discount.</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Amazon Prime ($14.00) renews in 5 days. QuickO Priority Guard active.</div>
                   </div>
                 </div>
               </div>
