@@ -126,7 +126,7 @@ export function AgentPrompt() {
 
     // Intent Matching
     const isStarbucks = lowerCmd.includes('starbucks') || lowerCmd.includes('latte') || lowerCmd.includes('coffee')
-    const isOrderFollowUp = lowerCmd.includes('order that') || lowerCmd.includes('buy that') || lowerCmd.includes('okay order') || lowerCmd.includes('checkout')
+    const isOrderFollowUp = lowerCmd.includes('order') || lowerCmd.includes('buy') || lowerCmd.includes('checkout')
 
     if (isStarbucks) {
       setMessages((prev: Message[]) => [
@@ -159,6 +159,26 @@ export function AgentPrompt() {
       return
     }
 
+    // If it's an order follow-up, check if they specified AirPods or something else dynamically
+    if (isOrderFollowUp && (lowerCmd.includes('airpods') || lowerCmd.includes('apple'))) {
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: userId, role: 'user', text: command, time },
+        {
+          id: agentId,
+          role: 'agent',
+          text: 'Found best verified price for AirPods Pro 2 on Amazon ($159.99). Ready for 1-Click PayPal Checkout:',
+          time,
+          pending: false,
+          customOrderType: 'price-match',
+          itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
+          amount: '159.99',
+        },
+      ])
+      setBusy(false)
+      return
+    }
+
     if (isOrderFollowUp) {
       setMessages((prev: Message[]) => [
         ...prev,
@@ -178,7 +198,7 @@ export function AgentPrompt() {
       return
     }
 
-    // Default API path
+    // Default API path for general queries (like "Compare airpods prices")
     setMessages((prev: Message[]) => [
       ...prev,
       { id: userId, role: 'user', text: command, time },
@@ -190,6 +210,28 @@ export function AgentPrompt() {
         pending: true,
       },
     ])
+
+    // Specific handler if they asked to compare airpods
+    if (lowerCmd.includes('airpods')) {
+      setTimeout(() => {
+        setMessages((prev: Message[]) =>
+          prev.map((m: Message) =>
+            m.id === agentId
+              ? {
+                  ...m,
+                  pending: false,
+                  text: 'Current deals show AirPods Pro 2 cheapest on Amazon at $159.99, while Best Buy and Walmart list them around $169.99. Savings of about $10 (~6%) if you buy from Amazon.',
+                  customOrderType: 'price-match',
+                  itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
+                  amount: '159.99',
+                }
+              : m,
+          ),
+        )
+        setBusy(false)
+      }, 1000)
+      return
+    }
 
     try {
       const res = await fetch('/api/agent', {
@@ -294,7 +336,7 @@ export function AgentPrompt() {
                     <div className="space-y-2">
                       <div>
                         <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                        <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
+                        <div className="text-[11px] text-emerald-400">${m.amount || '399.00'} · Best Verified Price</div>
                       </div>
                       <button
                         type="button"
@@ -308,7 +350,7 @@ export function AgentPrompt() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-xs font-semibold">
                         <span>{m.itemTitle}</span>
-                        <span className="text-primary">$399.00</span>
+                        <span className="text-primary">${m.amount || '399.00'}</span>
                       </div>
                       <QuickOPayPalCheckout
                         amount={m.amount || '399.00'}
