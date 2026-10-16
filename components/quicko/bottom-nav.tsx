@@ -64,7 +64,7 @@ export function BottomNav() {
         </ul>
       </nav>
 
-      {/* Interactive Bottom Sheet Modals with z-[9999] */}
+      {/* Interactive Bottom Sheet Modals */}
       {activeModal && (
         <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center">
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4">
@@ -87,8 +87,8 @@ export function BottomNav() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-                      <div className="text-sm font-semibold text-foreground">NVIDIA RTX Graphics Card</div>
-                      <div className="text-xs text-emerald-400">$649.00 · Price Matched & Paid via PayPal</div>
+                      <div className="text-sm font-semibold text-foreground">GeForce RTX 4060 Ti</div>
+                      <div className="text-xs text-emerald-400">$399.00 · Price Matched & Paid via PayPal</div>
                     </div>
                     <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Processing</span>
                   </div>
@@ -103,7 +103,7 @@ export function BottomNav() {
               </div>
             )}
 
-            {/* Subs Tab View (Updated with Amazon Prime & NVIDIA GeForce Now) */}
+            {/* Subs Tab View */}
             {activeModal === 'Subs' && (
               <div>
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
@@ -119,14 +119,8 @@ export function BottomNav() {
                   </div>
                   <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div>
-
-                    </div>
-                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Active</span>
-                  </div>
-                  <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
                       <div className="text-sm font-semibold text-foreground">Spotify Premium</div>
-                      <div className="text-xs text-muted-foreground">$10.99/mo · Priority 3</div>
+                      <div className="text-xs text-muted-foreground">$10.99/mo · Priority 2</div>
                     </div>
                     <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-medium text-purple-300">Active</span>
                   </div>
@@ -174,7 +168,7 @@ export function BottomNav() {
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                     <div className="text-sm font-semibold text-emerald-400">Price Drop Alert!</div>
-                    <div className="mt-1 text-xs text-muted-foreground">NVIDIA RTX Graphics Card fell by $45.00. 1-Click Price Match ready.</div>
+                    <div className="mt-1 text-xs text-muted-foreground">GeForce RTX 4060 Ti fell by $50.00. 1-Click Price Match ready.</div>
                   </div>
                   <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-4">
                     <div className="text-sm font-semibold text-purple-300">Upcoming Renewal</div>
