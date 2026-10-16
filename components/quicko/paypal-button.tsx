@@ -21,7 +21,7 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 overflow-hidden rounded-2xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner">
+      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner isolate [&_.paypal-buttons]:bg-[#1c1924] [&_iframe]:bg-[#1c1924]">
         <PayPalButtons
           style={{ 
             layout: "horizontal", 
