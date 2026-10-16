@@ -26,27 +26,29 @@ export default function QuickOPayPalCheckout({
           style={{ 
             layout: "horizontal", 
             height: 44, 
-            color: "blue",     // Changes it from gold to a clean blue theme
-            shape: "pill"      // Gives it smooth curved edges matching your UI
+            color: "blue", 
+            shape: "pill" 
           }}
-          createOrder={async () => {
-            try {
-              const res = await fetch("/api/paypal/create-order", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ amount, item: itemTitle }),
-              });
-              const data = await res.json();
-              if (data.id) return data.id;
-            } catch (err) {
-              console.error("API error, falling back to mock order ID for demo:", err);
+          createOrder={(data, actions) => {
+            return actions.order.create({
+              intent: "CAPTURE",
+              purchase_units: [
+                {
+                  amount: {
+                    currency_code: "USD",
+                    value: amount,
+                  },
+                  description: itemTitle,
+                },
+              ],
+            });
+          }}
+          onApprove={async (data, actions) => {
+            if (actions.order) {
+              const details = await actions.order.capture();
+              if (onSuccess) onSuccess();
+              alert(`🎉 Success! Transaction completed for ${itemTitle}.`);
             }
-            // Fallback mock order ID so the popup succeeds even if sandbox keys are missing
-            return "PAYPAL-DEMO-ORDER-" + Math.random().toString(36).substring(7).toUpperCase();
-          }}
-          onApprove={async (data) => {
-            if (onSuccess) onSuccess();
-            alert(`PayPal Order ${data.orderID} approved for ${itemTitle}!`);
           }}
         />
       </div>
