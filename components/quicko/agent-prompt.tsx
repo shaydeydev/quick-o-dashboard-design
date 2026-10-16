@@ -43,7 +43,6 @@ type Message = {
   customOrderType?: 'starbucks' | 'price-match'
   itemTitle?: string
   amount?: string
-  itemImage?: string
 }
 
 const history: Message[] = [
@@ -56,7 +55,6 @@ const history: Message[] = [
     customOrderType: 'price-match',
     itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
     amount: '399.00',
-    itemImage: '/rtx4060ti.jpg',
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
@@ -130,7 +128,7 @@ export function AgentPrompt() {
         role: 'agent',
         text: isStarbucks
           ? 'Preparing your Starbucks order details...'
-          : 'Searching live prices and deals…',
+          : 'Searching live prices and deals...',
         time,
         pending: true,
         customOrderType: isStarbucks ? 'starbucks' : undefined,
@@ -251,21 +249,12 @@ export function AgentPrompt() {
                 <span>{m.text}</span>
               </p>
 
-              {/* Price Match Quick PayPal Checkout with Image */}
+              {/* Price Match Quick PayPal Checkout */}
               {m.customOrderType === 'price-match' && (
                 <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3 space-y-2">
-                  <div className="flex items-center gap-3">
-                    {m.itemImage && (
-                      <img
-                        src={m.itemImage}
-                        alt={m.itemTitle || 'Product thumbnail'}
-                        className="size-12 rounded-lg object-cover border border-white/10 bg-white/5 shrink-0"
-                      />
-                    )}
-                    <div>
-                      <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                      <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
-                    </div>
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
+                    <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
                   </div>
                   <QuickOPayPalCheckout
                     amount={m.amount || '399.00'}
@@ -353,7 +342,7 @@ export function AgentPrompt() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
           }}
-          placeholder={busy ? 'QuickO is researching…' : listening ? 'Listening to voice prompt...' : 'Order my usual or pause low-priority subs...'}
+          placeholder={busy ? 'QuickO is researching...' : listening ? 'Listening to voice prompt...' : 'Order my usual or pause low-priority subs...'}
           className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
           autoComplete="off"
         />
