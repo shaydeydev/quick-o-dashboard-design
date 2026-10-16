@@ -21,8 +21,9 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner isolate">
-        <div className="relative w-full overflow-hidden rounded-lg bg-[#1c1924]">
+      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner">
+        {/* Pure white background wrapper makes PayPal's white iframe corners completely invisible */}
+        <div className="w-full overflow-hidden rounded-lg bg-white flex justify-center items-center py-1">
           <PayPalButtons
             style={{ 
               layout: "horizontal", 
