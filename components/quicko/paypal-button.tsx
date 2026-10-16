@@ -21,7 +21,12 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner isolate [&_.paypal-buttons]:bg-[#1c1924] [&_iframe]:bg-[#1c1924]">
+      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner">
+        <style jsx global>{`
+          .paypal-buttons, .paypal-buttons iframe {
+            background-color: #1c1924 !important;
+          }
+        `}</style>
         <PayPalButtons
           style={{ 
             layout: "horizontal", 
@@ -29,7 +34,7 @@ export default function QuickOPayPalCheckout({
             color: "blue", 
             shape: "pill",
             tagline: false,
-            label: "pay"
+            label: "paypal"
           }}
           createOrder={(data, actions) => {
             return actions.order.create({
@@ -47,7 +52,7 @@ export default function QuickOPayPalCheckout({
           }}
           onApprove={async (data, actions) => {
             if (actions.order) {
-              const details = await actions.order.capture();
+              await actions.order.capture();
               if (onSuccess) onSuccess();
               alert(`🎉 Success! Order placed for ${itemTitle}.`);
             }
