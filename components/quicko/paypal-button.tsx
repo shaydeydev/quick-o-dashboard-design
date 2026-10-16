@@ -22,15 +22,15 @@ export default function QuickOPayPalCheckout({
   return (
     <PayPalScriptProvider options={initialOptions}>
       <div className="w-full mt-3 rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner flex justify-center items-center">
-        {/* clip-path inset physically crops out the iframe's rogue white corners */}
+        {/* Larger button container with precise bottom inset cropping */}
         <div 
-          className="overflow-hidden rounded-xl"
-          style={{ clipPath: "inset(3px round 10px)" }}
+          className="w-full flex justify-center overflow-hidden rounded-xl"
+          style={{ clipPath: "inset(2px 2px 5px 2px round 12px)" }}
         >
           <PayPalButtons
             style={{ 
               layout: "horizontal", 
-              height: 40, 
+              height: 48, 
               color: "blue", 
               shape: "pill",
               tagline: false,
