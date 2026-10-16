@@ -21,13 +21,15 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3">
+      <div className="w-full mt-3 bg-transparent overflow-hidden rounded-full">
         <PayPalButtons
           style={{ 
             layout: "horizontal", 
             height: 44, 
             color: "blue", 
-            shape: "pill" 
+            shape: "pill",
+            tagline: false, // Removes the white box with "The safer, easier way to pay"
+            label: "pay"
           }}
           createOrder={(data, actions) => {
             return actions.order.create({
@@ -47,7 +49,7 @@ export default function QuickOPayPalCheckout({
             if (actions.order) {
               const details = await actions.order.capture();
               if (onSuccess) onSuccess();
-              alert(`🎉 Success! Transaction completed for ${itemTitle}.`);
+              alert(`🎉 Success! Order placed for ${itemTitle}.`);
             }
           }}
         />

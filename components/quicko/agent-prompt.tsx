@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Loader2, Mic, Sparkles } from 'lucide-react'
+import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import QuickOPayPalCheckout from './paypal-button'
 
-const suggestions = ['Reorder coffee beans', 'Find cheaper AirPods', 'Pause Netflix']
+const suggestions = ['Reorder coffee beans', 'Find cheaper AirPods', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
 
 const dashboardContext = {
   paypalBalance: 30,
@@ -39,6 +40,9 @@ type Message = {
   pending?: boolean
   payload?: AgentPayload
   error?: string
+  customOrderType?: 'starbucks' | 'price-match'
+  itemTitle?: string
+  amount?: string
 }
 
 const history: Message[] = [
@@ -48,6 +52,9 @@ const history: Message[] = [
     role: 'agent',
     text: 'Scanned Amazon and Walmart. Walmart has them for $329, which is $19 less than Amazon. Ready for 1-Click PayPal Checkout.',
     time: '9:41 AM',
+    customOrderType: 'price-match',
+    itemTitle: 'Sony WH-1000XM5 Headphones (Walmart)',
+    amount: '329.00',
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
@@ -68,6 +75,8 @@ export function AgentPrompt() {
   const [listening, setListening] = useState(false)
   const [messages, setMessages] = useState<Message[]>(history)
   const [busy, setBusy] = useState(false)
+  const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout'>('size')
+  const [selectedSize, setSelectedSize] = useState({ label: 'Venti', price: '6.45' })
   const streamRef = useRef<HTMLOListElement>(null)
   const idRef = useRef(history.length)
   const requestRef = useRef(0)
@@ -85,6 +94,18 @@ export function AgentPrompt() {
     return null
   }
 
+  const handleMicClick = () => {
+    if (listening) {
+      setListening(false)
+      return
+    }
+    setListening(true)
+    setTimeout(() => {
+      setValue('Order a pumpkin spice latte from Starbucks')
+      setListening(false)
+    }, 2200)
+  }
+
   async function submit(commandOverride?: string) {
     const command = (commandOverride ?? value).trim()
     if (!command || busy) return
@@ -96,17 +117,41 @@ export function AgentPrompt() {
 
     setValue('')
     setBusy(true)
-    setMessages((prev) => [
+
+    const isStarbucks = command.toLowerCase().includes('starbucks') || command.toLowerCase().includes('latte')
+
+    setMessages((prev: Message[]) => [
       ...prev,
       { id: userId, role: 'user', text: command, time },
       {
         id: agentId,
         role: 'agent',
-        text: 'Searching live prices and deals…',
+        text: isStarbucks
+          ? 'Preparing your Starbucks order details...'
+          : 'Searching live prices and deals…',
         time,
         pending: true,
+        customOrderType: isStarbucks ? 'starbucks' : undefined,
       },
     ])
+
+    if (isStarbucks) {
+      setTimeout(() => {
+        setMessages((prev: Message[]) =>
+          prev.map((m: Message) =>
+            m.id === agentId
+              ? {
+                  ...m,
+                  pending: false,
+                  text: 'Select your preferred size to place the Starbucks order via 1-Click PayPal Checkout:',
+                }
+              : m,
+          ),
+        )
+        setBusy(false)
+      }, 1000)
+      return
+    }
 
     try {
       const res = await fetch('/api/agent', {
@@ -119,19 +164,20 @@ export function AgentPrompt() {
       if (requestId !== requestRef.current) return
 
       if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
-        const error = (data as AgentError).error || `Request failed (${res.status})`
-        setMessages((prev) =>
-          prev.map((m) =>
+        const errObj = data as AgentError
+        const errorMsg = errObj?.error || `Request failed (${res.status})`
+        setMessages((prev: Message[]) =>
+          prev.map((m: Message) =>
             m.id === agentId
-              ? { ...m, pending: false, text: error, error }
+              ? { ...m, pending: false, text: errorMsg, error: errorMsg }
               : m,
           ),
         )
         return
       }
 
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev: Message[]) =>
+        prev.map((m: Message) =>
           m.id === agentId
             ? { ...m, pending: false, text: data.summary, payload: data }
             : m,
@@ -139,9 +185,9 @@ export function AgentPrompt() {
       )
     } catch (err) {
       if (requestId !== requestRef.current) return
-      const error = err instanceof Error ? err.message : 'Could not reach QuickO agent.'
-      setMessages((prev) =>
-        prev.map((m) => (m.id === agentId ? { ...m, pending: false, text: error, error } : m)),
+      const errorMsg = err instanceof Error ? err.message : 'Could not reach QuickO agent.'
+      setMessages((prev: Message[]) =>
+        prev.map((m: Message) => (m.id === agentId ? { ...m, pending: false, text: errorMsg, error: errorMsg } : m)),
       )
     } finally {
       if (requestId === requestRef.current) setBusy(false)
@@ -202,6 +248,70 @@ export function AgentPrompt() {
                 )}
                 <span>{m.text}</span>
               </p>
+
+              {/* Price Match Quick PayPal Checkout */}
+              {m.customOrderType === 'price-match' && (
+                <div className="mt-3 rounded-xl border border-primary/20 bg-background/50 p-3">
+                  <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
+                  <div className="text-[11px] text-emerald-400">$329.00 · Price Matched ($19 Savings)</div>
+                  <QuickOPayPalCheckout
+                    amount={m.amount || '329.00'}
+                    itemTitle={m.itemTitle || 'Sony Headphones'}
+                  />
+                </div>
+              )}
+
+              {/* In-Chat Starbucks Order Card */}
+              {m.customOrderType === 'starbucks' && !m.pending && (
+                <div className="mt-3 space-y-3 rounded-2xl border border-primary/30 bg-background/60 p-3">
+                  {starbucksStep === 'size' ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-foreground">Starbucks Pumpkin Spice Latte</div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { label: 'Tall', price: '4.95' },
+                          { label: 'Grande', price: '5.75' },
+                          { label: 'Venti', price: '6.45' },
+                        ].map((sz) => (
+                          <button
+                            key={sz.label}
+                            type="button"
+                            onClick={() => setSelectedSize(sz)}
+                            className={cn(
+                              'rounded-xl border py-1.5 text-[11px] font-medium transition-all',
+                              selectedSize.label === sz.label
+                                ? 'border-primary bg-primary/20 text-primary'
+                                : 'border-white/10 bg-white/5 hover:bg-white/10 text-muted-foreground',
+                            )}
+                          >
+                            {sz.label} (${sz.price})
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setStarbucksStep('checkout')}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
+                      >
+                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span>Starbucks Pumpkin Spice Latte ({selectedSize.label})</span>
+                        <span className="text-primary">${selectedSize.price}</span>
+                      </div>
+                      <QuickOPayPalCheckout
+                        amount={selectedSize.price}
+                        itemTitle={`Starbucks Pumpkin Spice Latte (${selectedSize.label})`}
+                        onSuccess={() => setStarbucksStep('size')}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {m.payload && <LiveAgentResult payload={m.payload} />}
             </div>
             <time className="px-1 text-[10px] text-muted-foreground">{m.time}</time>
@@ -230,7 +340,7 @@ export function AgentPrompt() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
           }}
-          placeholder={busy ? 'QuickO is researching…' : listening ? 'Listening…' : 'Order my usual or pause low-priority subs...'}
+          placeholder={busy ? 'QuickO is researching…' : listening ? 'Listening to voice prompt...' : 'Order my usual or pause low-priority subs...'}
           className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
           autoComplete="off"
         />
@@ -250,19 +360,16 @@ export function AgentPrompt() {
         ) : (
           <button
             type="button"
-            onClick={() => setListening((l) => !l)}
+            onClick={handleMicClick}
             aria-pressed={listening}
             aria-label={listening ? 'Stop voice input' : 'Start voice input'}
             className={cn(
               'relative flex size-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95',
               listening
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-red-500 text-white animate-pulse'
                 : 'bg-gradient-to-br from-primary/90 to-glow text-primary-foreground glow-ring',
             )}
           >
-            {listening && (
-              <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-xl bg-primary/40" />
-            )}
             <Mic className="relative size-4" aria-hidden="true" />
           </button>
         )}
