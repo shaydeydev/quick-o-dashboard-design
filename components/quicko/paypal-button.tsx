@@ -21,18 +21,24 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner flex justify-center items-center">
-        {/* Larger button container with precise bottom inset cropping */}
-        <div 
-          className="w-full flex justify-center overflow-hidden rounded-xl"
-          style={{ clipPath: "inset(2px 2px 5px 2px round 12px)" }}
-        >
+      <div className="w-full mt-3 rounded-2xl bg-[#1c1924] border border-white/10 p-1.5 relative shadow-inner overflow-hidden">
+        {/* Forces full width and removes white background from internal iframe elements */}
+        <style jsx global>{`
+          .paypal-buttons, 
+          .paypal-buttons iframe {
+            width: 100% !important;
+            min-width: 100% !important;
+            background-color: transparent !important;
+          }
+        `}</style>
+        
+        <div className="w-full overflow-hidden rounded-xl bg-[#1c1924]">
           <PayPalButtons
             style={{ 
               layout: "horizontal", 
-              height: 48, 
+              height: 55, 
               color: "blue", 
-              shape: "pill",
+              shape: "rect",
               tagline: false,
               label: "paypal"
             }}
