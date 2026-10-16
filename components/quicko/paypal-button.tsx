@@ -21,9 +21,12 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 overflow-hidden rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner">
-        {/* Pure white background wrapper makes PayPal's white iframe corners completely invisible */}
-        <div className="w-full overflow-hidden rounded-lg bg-white flex justify-center items-center py-1">
+      <div className="w-full mt-3 rounded-xl bg-[#1c1924] border border-white/10 p-2.5 relative shadow-inner flex justify-center items-center">
+        {/* clip-path inset physically crops out the iframe's rogue white corners */}
+        <div 
+          className="overflow-hidden rounded-xl"
+          style={{ clipPath: "inset(3px round 10px)" }}
+        >
           <PayPalButtons
             style={{ 
               layout: "horizontal", 
