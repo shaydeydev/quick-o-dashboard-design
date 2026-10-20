@@ -33,9 +33,9 @@ export default function Page() {
         </header>
 
         {/* Desktop Grid Layout: Main Chat Stream + Sidebar Widgets */}
-        <main className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3 pb-12">
+        <main className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3 pb-16">
           
-          {/* Left / Center: Agent Chat Stream (Takes up 2 columns on desktop) */}
+          {/* Left / Center: Agent Chat Stream */}
           <div className="flex flex-col gap-6 lg:col-span-2">
             <div className="rounded-3xl border border-white/10 bg-[#12141c]/60 p-6 shadow-xl backdrop-blur-xl h-full flex flex-col">
               <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-4">
@@ -66,12 +66,12 @@ export default function Page() {
           </aside>
 
         </main>
+      </div>
 
-        {/* Footer / Mobile Nav Adaptation */}
-        <div className="lg:hidden">
-          <BottomNav />
-        </div>
+      {/* Mobile Only Navigation Bar */}
+      <div className="block lg:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+        <BottomNav />
       </div>
     </div>
   )
-}
+} 
