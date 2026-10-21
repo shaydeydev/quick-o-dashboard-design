@@ -45,7 +45,7 @@ export default function PhysicalAIScanner() {
   const [voiceOn, setVoiceOn] = useState(true);
   const [statusMsg, setStatusMsg] = useState("Camera is off.");
 
-  // Keep the shared scan phase in sync (the 3D background will react to this)
+  // Keep the shared scan phase in sync (the 3D background reacts to this)
   useEffect(() => {
     setScanPhase(STAGE_TO_PHASE[stage]);
   }, [stage]);
@@ -318,6 +318,7 @@ export default function PhysicalAIScanner() {
             key={`${scanItem.title}-${scanItem.price}-${scanItem.merchant}`}
             item={scanItem}
             startOpen
+            savings={savings}
           />
         )}
       </div>
