@@ -10,7 +10,7 @@ import IntroOverlay from '@/components/IntroOverlay'
 
 export default function Page() {
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#0b0f17] text-white">
+    <div className="relative min-h-screen overflow-x-hidden text-white">
       <Interactive3DBackground />
       <IntroOverlay />
 
