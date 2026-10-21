@@ -14,6 +14,7 @@ import {
 import { useOrders, type OrderStatus } from '@/lib/orders-store'
 import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
 import { useSavings } from '@/lib/savings-store'
+import { toggleArExpanded, useArExpanded } from '@/lib/ar-store'
 
 const orderStatusClass: Record<OrderStatus, string> = {
   Delivered: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
@@ -27,6 +28,7 @@ export function AppHeader() {
   const orders = useOrders()
   const { items: subscriptions, paused } = useSubscriptions()
   const saved = useSavings()
+  const arOpen = useArExpanded()
 
   const handleNavClick = (id: string) => {
     setActiveTab(id)
@@ -142,12 +144,21 @@ export function AppHeader() {
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#8266d2]" />
           </button>
 
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#8266d2]/30 bg-[#8266d2]/20 text-xs font-bold text-[#8266d2]"
-            aria-label="User profile: AR"
+          {/* AR button: makes the scanner bigger (press again to shrink it) */}
+          <button
+            type="button"
+            onClick={toggleArExpanded}
+            aria-pressed={arOpen}
+            aria-label="Big AR scanner view"
+            title={arOpen ? 'Make the scanner smaller' : 'Open the big AR scanner'}
+            className={
+              arOpen
+                ? 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-[#8266d2] bg-[#8266d2] text-xs font-bold text-white shadow-md shadow-[#8266d2]/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#12141c]'
+                : 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-[#8266d2]/30 bg-[#8266d2]/20 text-xs font-bold text-[#a995f5] transition-colors hover:bg-[#8266d2]/35 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#12141c]'
+            }
           >
             AR
-          </div>
+          </button>
         </div>
       </header>
 
@@ -242,7 +253,7 @@ export function AppHeader() {
 
               {/* Subscriptions (live from the shared store) */}
               {activeModal === 'subs' && (
-                <div className="space-y-3">
+                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                   {subscriptions.map((sub, index) => {
                     const isPaused = !!paused[sub.id]
                     return (
@@ -251,9 +262,9 @@ export function AppHeader() {
                         className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3.5"
                       >
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-white">{sub.name}</p>
+                          <p className="truncate text-xs font-semibold text-white">{sub.name}</p>
                           <p className="text-[11px] text-slate-400">
-                            ${sub.price}/mo | Priority {index + 1}
+                            ${Number.isInteger(sub.price) ? sub.price : sub.price.toFixed(2)}/mo | Priority {index + 1}
                           </p>
                         </div>
 
