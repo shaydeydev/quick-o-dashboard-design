@@ -56,8 +56,20 @@ function subscribe(cb: () => void) {
   return () => listeners.delete(cb);
 }
 
+// Read the current state outside React (used by the chat)
+export function getSubscriptions() {
+  return state;
+}
+
 export function togglePause(id: string) {
   state = { ...state, paused: { ...state.paused, [id]: !state.paused[id] } };
+  emit();
+}
+
+// Set pause on or off for sure. Does nothing if already in that state.
+export function setPaused(id: string, value: boolean) {
+  if (!!state.paused[id] === value) return;
+  state = { ...state, paused: { ...state.paused, [id]: value } };
   emit();
 }
 
