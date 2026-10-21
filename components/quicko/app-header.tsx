@@ -228,27 +228,38 @@ export function AppHeader() {
             <div className="py-2">
               {/* Orders (live from the shared store) */}
               {activeModal === 'orders' && (
-                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
-                  {orders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-white">{order.title}</p>
-                        <p className="text-[11px] text-slate-400">
-                          Merchant: {order.merchant} | ${order.price.toFixed(2)} | {order.method}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${orderStatusClass[order.status]}`}
-                      >
-                        {order.status}
-                      </span>
+                <>
+                  {orders.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-4 py-8 text-center">
+                      <p className="text-xs font-semibold text-white">No orders yet</p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Scan a product and check out with PayPal. Your orders show up here.
+                      </p>
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                      {orders.map((order) => (
+                        <div
+                          key={order.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-white">{order.title}</p>
+                            <p className="text-[11px] text-slate-400">
+                              Merchant: {order.merchant} | ${order.price.toFixed(2)} | {order.method}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${orderStatusClass[order.status]}`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Subscriptions (live from the shared store) */}
