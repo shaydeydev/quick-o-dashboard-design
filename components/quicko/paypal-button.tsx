@@ -21,50 +21,40 @@ export default function QuickOPayPalCheckout({
 
   return (
     <PayPalScriptProvider options={initialOptions}>
-      <div className="w-full mt-3 rounded-2xl bg-[#1c1924] border border-white/10 p-1.5 relative shadow-inner overflow-hidden">
-        {/* Forces full width and removes white background from internal iframe elements */}
-        <style jsx global>{`
-          .paypal-buttons, 
-          .paypal-buttons iframe {
-            width: 100% !important;
-            min-width: 100% !important;
-            background-color: transparent !important;
-          }
-        `}</style>
-        
-        <div className="w-full overflow-hidden rounded-xl bg-[#1c1924]">
-          <PayPalButtons
-            style={{ 
-              layout: "horizontal", 
-              height: 55, 
-              color: "blue", 
-              shape: "rect",
-              tagline: false,
-              label: "paypal"
-            }}
-            createOrder={(data, actions) => {
-              return actions.order.create({
-                intent: "CAPTURE",
-                purchase_units: [
-                  {
-                    amount: {
-                      currency_code: "USD",
-                      value: amount,
-                    },
-                    description: itemTitle,
+      {/* Capped and centered so PayPal sizes the button to the real container width */}
+      <div className="mx-auto mt-3 w-full max-w-[420px]">
+        <PayPalButtons
+          style={{
+            layout: "vertical",
+            height: 45,
+            color: "blue",
+            shape: "pill",
+            tagline: false,
+            label: "paypal",
+          }}
+          forceReRender={[amount, itemTitle]}
+          createOrder={(data, actions) => {
+            return actions.order.create({
+              intent: "CAPTURE",
+              purchase_units: [
+                {
+                  amount: {
+                    currency_code: "USD",
+                    value: amount,
                   },
-                ],
-              });
-            }}
-            onApprove={async (data, actions) => {
-              if (actions.order) {
-                await actions.order.capture();
-                if (onSuccess) onSuccess();
-                alert(`🎉 Success! Order placed for ${itemTitle}.`);
-              }
-            }}
-          />
-        </div>
+                  description: itemTitle,
+                },
+              ],
+            });
+          }}
+          onApprove={async (data, actions) => {
+            if (actions.order) {
+              await actions.order.capture();
+              if (onSuccess) onSuccess();
+              alert(`🎉 Success! Order placed for ${itemTitle}.`);
+            }
+          }}
+        />
       </div>
     </PayPalScriptProvider>
   );
