@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, Home, Repeat, ShoppingBag, Wallet, X, CreditCard, CheckCircle2, type LucideIcon } from 'lucide-react'
+import { Bell, Check, Home, Repeat, ShoppingBag, Wallet, X, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOrders, type OrderStatus } from '@/lib/orders-store'
-import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
+import { PAYPAL_BALANCE, useSubscriptions, togglePause } from '@/lib/subscriptions-store'
 
 type NavItem = { label: string; icon: LucideIcon }
 
@@ -207,33 +207,43 @@ export function BottomNav() {
               </div>
             )}
 
-            {/* Wallet Tab View */}
+            {/* Wallet Tab View (same look as the desktop Wallet Manager) */}
             {activeModal === 'Wallet' && (
               <div>
-                <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-                  <Wallet className="size-5 text-primary" /> QuickO Wallet & Accounts
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 p-4">
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="size-6 text-primary" />
-                      <div>
-                        <div className="text-sm font-semibold text-foreground">PayPal Sandbox Linked</div>
-                        <div className="text-xs text-muted-foreground">1-Click Instant Checkout Ready</div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-emerald-400">Connected</span>
+                <div className="flex items-center gap-3 border-b border-white/10 pb-4 pr-10">
+                  <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/15">
+                    <Wallet className="size-5 text-primary" aria-hidden="true" />
+                  </span>
+                  <h3 className="text-xl font-bold text-foreground">Wallet Manager</h3>
+                </div>
+
+                <div className="mt-5 rounded-3xl border border-primary/30 bg-primary/10 p-5">
+                  <div className="text-sm font-medium text-foreground/80">PayPal Express Balance</div>
+                  <div className="mt-1 text-4xl font-extrabold text-foreground">${PAYPAL_BALANCE.toFixed(2)}</div>
+                  <div className="mt-3 flex items-center gap-1.5 text-sm text-emerald-400">
+                    <Check className="size-4" aria-hidden="true" /> Wallet connected and ready
                   </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="size-6 text-muted-foreground" />
-                      <div>
-                        <div className="text-sm font-semibold text-foreground">Visa ending in 4242</div>
-                        <div className="text-xs text-muted-foreground">Default Backup Card</div>
-                      </div>
-                    </div>
-                    <CheckCircle2 className="size-4 text-emerald-400" />
+                </div>
+
+                <div className="mt-4 space-y-3 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Payment method</span>
+                    <span className="font-semibold text-foreground">PayPal Express</span>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Payment status</span>
+                    <span className="font-semibold text-emerald-400">Ready</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-end border-t border-white/10 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             )}
