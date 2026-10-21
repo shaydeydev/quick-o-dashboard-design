@@ -1,14 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag, CheckCircle2 } from 'lucide-react'
+import { ArrowUp, Loader2, Mic, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import QuickOPayPalCheckout from './paypal-button'
 import { ProductCheckout } from './product-checkout'
 import { getCheckoutItem, setCheckoutItem, type CheckoutItem } from '@/lib/checkout-store'
-import { addOrder } from '@/lib/orders-store'
 
-const suggestions = ['Reorder coffee beans', 'Find cheaper RTX card', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
+const suggestions = [
+  'Pause Netflix',
+  'Find cheaper RTX card',
+  'Which subscription should I cut?',
+  'Protect my Prime and Spotify',
+]
 
 const baseContext = {
   paypalBalance: 30,
@@ -54,27 +57,8 @@ type Message = {
   pending?: boolean
   payload?: AgentPayload
   error?: string
-  customOrderType?: 'starbucks'
   checkout?: CheckoutItem
 }
-
-const history: Message[] = [
-  { id: 1, role: 'user', text: 'Find me the best price on a GeForce RTX 4060 Ti.', time: '9:41 AM' },
-  {
-    id: 2,
-    role: 'agent',
-    text: 'Scanned Amazon and Newegg. Newegg has it for $399, which is $50 less than Amazon. Ready for 1-Click PayPal Checkout.',
-    time: '9:41 AM',
-    checkout: { title: 'GeForce RTX 4060 Ti', merchant: 'Newegg', price: 399 },
-  },
-  { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
-  {
-    id: 4,
-    role: 'agent',
-    text: 'Done. Netflix (Priority 3) is paused. Amazon Prime stays active — $14.00 of your $30.00 balance is covered.',
-    time: '9:43 AM',
-  },
-]
 
 function nowLabel() {
   return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -129,15 +113,12 @@ export function AgentPrompt() {
   const [value, setValue] = useState('')
   const [listening, setListening] = useState(false)
   const [voiceError, setVoiceError] = useState('')
-  const [messages, setMessages] = useState<Message[]>(history)
+  // Chat starts empty. Nothing is saved, so a page reload is a fresh chat.
+  const [messages, setMessages] = useState<Message[]>([])
   const [busy, setBusy] = useState(false)
 
-  // Starbucks demo flow
-  const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout' | 'ordered'>('size')
-  const [selectedSize, setSelectedSize] = useState({ label: 'Venti', price: '6.45' })
-
   const streamRef = useRef<HTMLOListElement>(null)
-  const idRef = useRef(history.length)
+  const idRef = useRef(0)
   const requestRef = useRef(0)
   const recognitionRef = useRef<any>(null)
 
@@ -253,42 +234,10 @@ export function AgentPrompt() {
     const lowerCmd = command.toLowerCase()
 
     // Intent matching
-    const isStarbucks = lowerCmd.includes('starbucks') || lowerCmd.includes('latte') || lowerCmd.includes('coffee')
     const isOrderIntent = /\b(order|buy|purchase|check\s?out|checkout)\b/.test(lowerCmd)
     const refersToLast =
       /\b(it|that|this|them|those|one)\b/.test(lowerCmd) || lowerCmd.split(/\s+/).length <= 3
     const isPriceIntent = /\b(price|prices|cheap|cheaper|cheapest|compare|deal|deals|best|find|cost|lowest)\b/.test(lowerCmd)
-
-    if (isStarbucks) {
-      setMessages((prev: Message[]) => [
-        ...prev,
-        { id: userId, role: 'user', text: command, time },
-        {
-          id: agentId,
-          role: 'agent',
-          text: 'Preparing your Starbucks order details...',
-          time,
-          pending: true,
-          customOrderType: 'starbucks',
-        },
-      ])
-
-      setTimeout(() => {
-        setMessages((prev: Message[]) =>
-          prev.map((m: Message) =>
-            m.id === agentId
-              ? {
-                  ...m,
-                  pending: false,
-                  text: 'Select your preferred size to place the Starbucks order via 1-Click PayPal Checkout:',
-                }
-              : m,
-          ),
-        )
-        setBusy(false)
-      }, 1000)
-      return
-    }
 
     // "Order it" / "buy that": check out the last product compared or scanned
     if (isOrderIntent && refersToLast) {
@@ -396,9 +345,16 @@ export function AgentPrompt() {
         aria-live="polite"
         className="relative mt-4 flex max-h-[28rem] flex-col gap-3 overflow-y-auto pr-1 [scrollbar-width:thin]"
       >
-        <li className="text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Today
-        </li>
+        {messages.length === 0 && (
+          <li className="rounded-2xl border border-dashed border-border bg-secondary/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            Ask me to compare prices, find a deal, or look after your subscriptions. Tap a suggestion below to start.
+          </li>
+        )}
+        {messages.length > 0 && (
+          <li className="text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Today
+          </li>
+        )}
         {messages.map((m) => (
           <li key={m.id} className={cn('flex flex-col gap-1', m.role === 'user' ? 'items-end' : 'items-start')}>
             {m.role === 'agent' && (
@@ -428,69 +384,6 @@ export function AgentPrompt() {
               {/* Dynamic checkout for whatever product was compared, scanned, or asked for */}
               {m.checkout && !m.pending && <ProductCheckout item={m.checkout} />}
 
-              {/* In-Chat Starbucks Order Card */}
-              {m.customOrderType === 'starbucks' && !m.pending && (
-                <div className="mt-3 space-y-3 rounded-2xl border border-primary/30 bg-background/60 p-3">
-                  {starbucksStep === 'size' ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-foreground">Starbucks Pumpkin Spice Latte</div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { label: 'Tall', price: '4.95' },
-                          { label: 'Grande', price: '5.75' },
-                          { label: 'Venti', price: '6.45' },
-                        ].map((sz) => (
-                          <button
-                            key={sz.label}
-                            type="button"
-                            onClick={() => setSelectedSize(sz)}
-                            className={cn(
-                              'rounded-xl border py-1.5 text-[11px] font-medium transition-all',
-                              selectedSize.label === sz.label
-                                ? 'border-primary bg-primary/20 text-primary'
-                                : 'border-white/10 bg-white/5 hover:bg-white/10 text-muted-foreground',
-                            )}
-                          >
-                            {sz.label} (${sz.price})
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setStarbucksStep('checkout')}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
-                      >
-                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
-                      </button>
-                    </div>
-                  ) : starbucksStep === 'checkout' ? (
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs font-semibold">
-                        <span>Starbucks Pumpkin Spice Latte ({selectedSize.label})</span>
-                        <span className="text-primary">${selectedSize.price}</span>
-                      </div>
-                      <QuickOPayPalCheckout
-                        amount={selectedSize.price}
-                        itemTitle={`Starbucks Pumpkin Spice Latte (${selectedSize.label})`}
-                        onSuccess={() => {
-                          addOrder({
-                            title: `Starbucks Pumpkin Spice Latte (${selectedSize.label})`,
-                            merchant: 'Starbucks',
-                            price: parseFloat(selectedSize.price),
-                            method: '1-Click PayPal',
-                          })
-                          setStarbucksStep('ordered')
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
-                      <CheckCircle2 className="size-4" /> Ordered! Starbucks is preparing your {selectedSize.label} Latte.
-                    </div>
-                  )}
-                </div>
-              )}
-
               {m.payload && <LiveAgentResult payload={m.payload} />}
             </div>
             <time className="px-1 text-[10px] text-muted-foreground">{m.time}</time>
@@ -519,7 +412,7 @@ export function AgentPrompt() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) e.preventDefault()
           }}
-          placeholder={busy ? 'QuickO is researching...' : listening ? 'Listening to voice prompt...' : 'Order my usual or pause low-priority subs...'}
+          placeholder={busy ? 'QuickO is researching...' : listening ? 'Listening to voice prompt...' : 'Compare prices or manage your subscriptions...'}
           className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
           autoComplete="off"
         />
@@ -622,7 +515,7 @@ function LiveAgentResult({ payload }: { payload: AgentPayload }) {
         </ul>
       )}
 
-            {payload.actionItems.length > 0 && (
+      {payload.actionItems.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {payload.actionItems.map((item, i) => {
             const a = item as { id?: string; label?: string; type?: string }
