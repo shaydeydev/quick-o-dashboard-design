@@ -3,6 +3,7 @@ import { AppHeader } from '@/components/quicko/app-header'
 import { AgentPrompt } from '@/components/quicko/agent-prompt'
 import { PriceMatch } from '@/components/quicko/price-match'
 import { SubscriptionGuard } from '@/components/quicko/subscription-guard'
+import PhysicalAIScanner from '@/components/quicko/physical-ai-scanner'
 import { BottomNav } from '@/components/quicko/bottom-nav'
 import Interactive3DBackground from '@/components/Interactive3DBackground'
 import IntroOverlay from '@/components/IntroOverlay'
@@ -32,6 +33,11 @@ export default function Page() {
           <AppHeader />
         </header>
 
+        {/* FRONT & CENTER: Physical AI Scanner Hero Section */}
+        <section className="mb-6">
+          <PhysicalAIScanner />
+        </section>
+
         {/* Desktop Grid Layout: Main Chat Stream + Sidebar Widgets */}
         <main className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3 pb-16">
           
@@ -54,7 +60,7 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Right Sidebar: Subscription Guard & Price Match Live Widgets */}
+          {/* Right Sidebar: Subscription Guard & Price Match Widgets */}
           <aside className="flex flex-col gap-6 lg:col-span-1">
             <div className="rounded-3xl border border-white/10 bg-[#12141c]/60 p-5 shadow-xl backdrop-blur-xl">
               <SubscriptionGuard />
@@ -74,4 +80,4 @@ export default function Page() {
       </div>
     </div>
   )
-} 
+}
