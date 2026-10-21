@@ -15,7 +15,6 @@ import {
 } from '@dnd-kit/core'
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -23,45 +22,15 @@ import {
 import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
-
-type Subscription = {
-  id: string
-  name: string
-  price: number
-  renews: string
-  logo: string
-  logoClassName: string
-}
+import {
+  useSubscriptions,
+  togglePause,
+  reorderSubscriptions,
+  type Subscription,
+} from '@/lib/subscriptions-store'
 
 const TODAY = new Date('2026-10-15T00:00:00')
 const DAY_MS = 86_400_000
-
-const initialSubscriptions: Subscription[] = [
-  {
-    id: 'prime',
-    name: 'Amazon Prime',
-    price: 14,
-    renews: '2026-10-21',
-    logo: '/images/logos/prime.jpg',
-    logoClassName: 'object-cover',
-  },
-  {
-    id: 'spotify',
-    name: 'Spotify',
-    price: 11,
-    renews: '2026-10-24',
-    logo: '/images/logos/spotify.png',
-    logoClassName: 'object-cover scale-[1.35] bg-black',
-  },
-  {
-    id: 'netflix',
-    name: 'Netflix',
-    price: 15,
-    renews: '2026-10-18',
-    logo: '/images/logos/netflix.png',
-    logoClassName: 'object-cover',
-  },
-]
 
 const priorityLevels = [
   { label: 'High', className: 'border-primary/40 bg-primary/15 text-primary' },
@@ -90,8 +59,8 @@ function formatDate(isoDate: string) {
 
 export function SubscriptionGuard() {
   const [tab, setTab] = useState<TabId>('guard')
-  const [subscriptions, setSubscriptions] = useState(initialSubscriptions)
-  const [paused, setPaused] = useState<Record<string, boolean>>({ netflix: true })
+  // Shared with the Subscriptions Manager modals
+  const { items: subscriptions, paused } = useSubscriptions()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -103,15 +72,7 @@ export function SubscriptionGuard() {
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return
-    setSubscriptions((items) => {
-      const from = items.findIndex((i) => i.id === active.id)
-      const to = items.findIndex((i) => i.id === over.id)
-      return arrayMove(items, from, to)
-    })
-  }
-
-  function togglePause(id: string) {
-    setPaused((p) => ({ ...p, [id]: !p[id] }))
+    reorderSubscriptions(String(active.id), String(over.id))
   }
 
   return (
@@ -148,9 +109,9 @@ export function SubscriptionGuard() {
               <span className="text-muted-foreground"> / $30.00</span>
             </p>
           </div>
-            <DndContext
-              id="subscription-priority-dnd"
-              sensors={sensors}
+          <DndContext
+            id="subscription-priority-dnd"
+            sensors={sensors}
             collisionDetection={closestCenter}
             modifiers={[restrictToVerticalAxis, restrictToParentElement]}
             onDragEnd={handleDragEnd}
