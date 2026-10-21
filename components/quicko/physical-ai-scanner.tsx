@@ -8,6 +8,8 @@ import { ProductCheckout } from "./product-checkout";
 
 type Stage = "standby" | "camera" | "vision" | "pricing" | "success" | "error";
 
+type Box = { x: number; y: number; w: number; h: number; found: boolean };
+
 const STAGE_LABEL: Record<Stage, string> = {
   standby: "Standby",
   camera: "Live",
@@ -26,6 +28,14 @@ const STAGE_TO_PHASE = {
   error: "error",
 } as const;
 
+// Auto-scan tuning
+const TICK_MS = 250; // how often we look at the camera
+const HOLD_MS = 1500; // how long to hold steady before auto scan
+const STEADY_DIFF = 4; // below this = camera is still
+const MOVE_DIFF = 12; // above this = camera is moving
+const MW = 32; // tiny frame size used only to detect motion
+const MH = 18;
+
 // High-contrast keyboard focus ring for every interactive element
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#12141c]";
@@ -33,7 +43,15 @@ const focusRing =
 export default function PhysicalAIScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const motionCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Auto-scan bookkeeping (refs so the timer always sees fresh values)
+  const prevFrameRef = useRef<Uint8Array | null>(null);
+  const steadyMsRef = useRef(0);
+  const movingFramesRef = useRef(0);
+  const armedRef = useRef(true);
+  const scanRef = useRef<() => void>(() => {});
 
   const [stage, setStage] = useState<Stage>("standby");
   const [product, setProduct] = useState<any>(null);
@@ -42,7 +60,11 @@ export default function PhysicalAIScanner() {
   const [savings, setSavings] = useState(0);
   const [showCheckout, setShowCheckout] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false); // off by default
+  const [autoScan, setAutoScan] = useState(false); // off by default
+  const [hold, setHold] = useState(0); // 0..1 progress of "hold steady"
+  const [box, setBox] = useState<Box | null>(null);
+  const [overlayOn, setOverlayOn] = useState(true);
   const [statusMsg, setStatusMsg] = useState("Camera is off.");
 
   // Keep the shared scan phase in sync (the 3D background reacts to this)
@@ -74,6 +96,7 @@ export default function PhysicalAIScanner() {
       const video = videoRef.current!;
       video.srcObject = stream;
       await video.play();
+      armedRef.current = true;
       setStage("camera");
       setStatusMsg("Camera is live. Point it at a product and press Scan Item.");
     } catch (e: any) {
@@ -98,6 +121,9 @@ export default function PhysicalAIScanner() {
   };
 
   const scan = async () => {
+    armedRef.current = false; // need camera movement before the next auto scan
+    steadyMsRef.current = 0;
+    setHold(0);
     setError(null);
     setOffers([]);
     setProduct(null);
@@ -105,6 +131,8 @@ export default function PhysicalAIScanner() {
     setSavings(0);
     setShowCheckout(false);
     setCheckoutItem(null);
+    setBox(null);
+    setOverlayOn(true);
     const image = capture();
     if (!image) {
       setError("Camera isn't ready yet");
@@ -123,6 +151,13 @@ export default function PhysicalAIScanner() {
       const vData = await vRes.json();
       if (!vRes.ok) throw new Error(vData.error || "Vision failed");
       setProduct(vData.product);
+      setBox({
+        x: Number(vData.product.box_x) || 0.2,
+        y: Number(vData.product.box_y) || 0.15,
+        w: Number(vData.product.box_w) || 0.6,
+        h: Number(vData.product.box_h) || 0.7,
+        found: Boolean(vData.product.box_found),
+      });
 
       setStage("pricing");
       setStatusMsg(`Identified ${vData.product.name}. Searching for the lowest price…`);
@@ -174,6 +209,71 @@ export default function PhysicalAIScanner() {
     }
   };
 
+  // Always point the timer at the newest scan function
+  scanRef.current = scan;
+
+  // Watch the camera: hold steady = auto scan, move = hide old overlay and re-arm
+  useEffect(() => {
+    if (stage !== "camera" && stage !== "success") return;
+
+    const id = window.setInterval(() => {
+      const video = videoRef.current;
+      const c = motionCanvasRef.current;
+      if (!video || !c || !video.videoWidth) return;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      ctx.drawImage(video, 0, 0, MW, MH);
+      const d = ctx.getImageData(0, 0, MW, MH).data;
+      const cur = new Uint8Array(MW * MH);
+      for (let i = 0; i < cur.length; i++) {
+        cur[i] = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11;
+      }
+      const prev = prevFrameRef.current;
+      prevFrameRef.current = cur;
+      if (!prev) return;
+
+      let sum = 0;
+      for (let i = 0; i < cur.length; i++) sum += Math.abs(cur[i] - prev[i]);
+      const diff = sum / cur.length;
+
+      if (diff > MOVE_DIFF) {
+        steadyMsRef.current = 0;
+        setHold(0);
+        movingFramesRef.current += 1;
+        if (movingFramesRef.current >= 2) {
+          armedRef.current = true;
+          setOverlayOn(false); // old box no longer matches the picture
+        }
+        return;
+      }
+      movingFramesRef.current = 0;
+
+      if (diff < STEADY_DIFF) steadyMsRef.current += TICK_MS;
+      else steadyMsRef.current = 0;
+
+      if (autoScan && armedRef.current) {
+        setHold(Math.min(1, steadyMsRef.current / HOLD_MS));
+        if (steadyMsRef.current >= HOLD_MS) {
+          armedRef.current = false;
+          steadyMsRef.current = 0;
+          setHold(0);
+          scanRef.current();
+        }
+      } else {
+        setHold(0);
+      }
+    }, TICK_MS);
+
+    return () => {
+      window.clearInterval(id);
+      prevFrameRef.current = null;
+      steadyMsRef.current = 0;
+      movingFramesRef.current = 0;
+      setHold(0);
+    };
+  }, [stage, autoScan]);
+
   const toggleVoice = () => {
     setVoiceOn((v) => {
       if (v) stopSpeaking();
@@ -184,6 +284,20 @@ export default function PhysicalAIScanner() {
   const live = stage !== "standby" && stage !== "error";
   const busy = stage === "vision" || stage === "pricing";
 
+  // Cheapest few priced offers become floating badges
+  const badges = offers.filter((o) => o.price).slice(0, 3);
+
+  // Box color follows the scan stage
+  const boxColor =
+    stage === "vision"
+      ? "border-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.7)]"
+      : stage === "pricing"
+      ? "border-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.7)]"
+      : "border-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.7)]";
+
+  const showGuide = live && !box && (stage === "camera" || stage === "vision");
+  const showBox = live && box && overlayOn && stage !== "camera";
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#12141c]/70 p-3 backdrop-blur-xl sm:flex-row">
       {/* Screen-reader announcements for every stage */}
@@ -191,8 +305,8 @@ export default function PhysicalAIScanner() {
         {statusMsg}
       </div>
 
-      {/* Small camera preview */}
-      <div className="relative aspect-video w-full shrink-0 self-start overflow-hidden rounded-xl bg-black sm:w-56">
+      {/* Camera preview with fake-AR overlay */}
+      <div className="relative aspect-video w-full shrink-0 self-start overflow-hidden rounded-xl bg-black sm:w-72">
         <video
           ref={videoRef}
           playsInline
@@ -201,6 +315,88 @@ export default function PhysicalAIScanner() {
           className="h-full w-full object-cover"
         />
         <canvas ref={canvasRef} aria-hidden="true" className="hidden" />
+        <canvas
+          ref={motionCanvasRef}
+          width={MW}
+          height={MH}
+          aria-hidden="true"
+          className="hidden"
+        />
+
+        {/* Overlay is decoration only. Screen readers get the status message above. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          {/* Center guide before the model gives a box */}
+          {showGuide && (
+            <div
+              className={`absolute left-[20%] top-[15%] h-[70%] w-[60%] rounded-lg border-2 border-dashed ${
+                stage === "vision"
+                  ? "border-cyan-300 motion-safe:animate-pulse"
+                  : "border-white/50"
+              }`}
+            />
+          )}
+
+          {/* Box that locks on the product */}
+          {showBox && box && (
+            <div
+              className={`absolute rounded-md border-2 transition-all duration-300 ${boxColor} ${
+                stage === "pricing" ? "motion-safe:animate-pulse" : ""
+              }`}
+              style={{
+                left: `${box.x * 100}%`,
+                top: `${box.y * 100}%`,
+                width: `${box.w * 100}%`,
+                height: `${box.h * 100}%`,
+              }}
+            >
+              {product?.name && (
+                <span className="absolute bottom-1 left-1 max-w-[90%] truncate rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {product.name}
+                </span>
+              )}
+
+              {/* Floating price badges */}
+              {stage === "success" && badges.length > 0 && (
+                <div className="absolute right-1 top-1 flex flex-col items-end gap-1">
+                  {badges.map((o, i) => (
+                    <span
+                      key={o.url}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold shadow ${
+                        i === 0
+                          ? "bg-emerald-400 text-black"
+                          : "bg-black/75 text-white"
+                      }`}
+                    >
+                      {o.merchant} ${o.price.toFixed(2)}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {!box.found && (
+                <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] text-white/80">
+                  approx. position
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Hold-steady progress */}
+          {hold > 0 && (
+            <div className="absolute inset-x-3 bottom-2">
+              <p className="mb-1 text-center text-[10px] font-semibold text-white drop-shadow">
+                Hold steady…
+              </p>
+              <div className="h-1 overflow-hidden rounded bg-white/25">
+                <div
+                  className="h-full bg-emerald-400"
+                  style={{ width: `${hold * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white">
           {STAGE_LABEL[stage]}
         </span>
@@ -219,6 +415,19 @@ export default function PhysicalAIScanner() {
               className={`rounded-lg border border-white/30 px-3 py-1.5 text-xs text-white hover:bg-white/10 ${focusRing}`}
             >
               {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAutoScan((a) => !a)}
+              aria-pressed={autoScan}
+              aria-label={
+                autoScan
+                  ? "Turn auto scan off. Auto scan starts a scan when the camera is held steady."
+                  : "Turn auto scan on. Auto scan starts a scan when the camera is held steady."
+              }
+              className={`rounded-lg border border-white/30 px-3 py-1.5 text-xs text-white hover:bg-white/10 ${focusRing}`}
+            >
+              {autoScan ? "🎯 Auto-scan on" : "🎯 Auto-scan off"}
             </button>
             {!live ? (
               <button
@@ -242,6 +451,7 @@ export default function PhysicalAIScanner() {
                   type="button"
                   onClick={() => {
                     stopCamera();
+                    setBox(null);
                     setStage("standby");
                     setStatusMsg("Camera is off.");
                   }}
@@ -262,7 +472,9 @@ export default function PhysicalAIScanner() {
 
         {!product && !error && (
           <p className="text-xs text-slate-300">
-            Point your camera at a product and hit Scan to identify it and find the lowest price.
+            {autoScan
+              ? "Point your camera at a product and hold steady. It scans by itself, or hit Scan Item."
+              : "Point your camera at a product and hit Scan Item. Turn on Auto-scan to scan hands-free."}
           </p>
         )}
 
