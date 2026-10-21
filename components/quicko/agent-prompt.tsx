@@ -4,20 +4,33 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Loader2, Mic, Sparkles, ShoppingBag, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import QuickOPayPalCheckout from './paypal-button'
+import { ProductCheckout } from './product-checkout'
+import { getCheckoutItem, setCheckoutItem, type CheckoutItem } from '@/lib/checkout-store'
 
 const suggestions = ['Reorder coffee beans', 'Find cheaper RTX card', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
 
-const dashboardContext = {
+const baseContext = {
   paypalBalance: 30,
   productInView: {
     name: 'GeForce RTX 4060 Ti',
-    merchants: { Amazon: 449, Newegg: 399 },
+    merchants: { Amazon: 449, Newegg: 399 } as Record<string, number>,
   },
   subscriptions: [
     { name: 'Amazon Prime', price: 14, priority: 1, paused: false },
     { name: 'Spotify', price: 11, priority: 2, paused: false },
     { name: 'Netflix', price: 15, priority: 3, paused: true },
   ],
+}
+
+// Use the product the user is actually looking at (from chat or scanner) when there is one
+function buildContext() {
+  const last = getCheckoutItem()
+  return {
+    ...baseContext,
+    productInView: last
+      ? { name: last.title, merchants: { [last.merchant]: last.price } }
+      : baseContext.productInView,
+  }
 }
 
 type AgentPayload = {
@@ -40,9 +53,8 @@ type Message = {
   pending?: boolean
   payload?: AgentPayload
   error?: string
-  customOrderType?: 'starbucks' | 'price-match' | 'airpods'
-  itemTitle?: string
-  amount?: string
+  customOrderType?: 'starbucks'
+  checkout?: CheckoutItem
 }
 
 const history: Message[] = [
@@ -52,9 +64,7 @@ const history: Message[] = [
     role: 'agent',
     text: 'Scanned Amazon and Newegg. Newegg has it for $399, which is $50 less than Amazon. Ready for 1-Click PayPal Checkout.',
     time: '9:41 AM',
-    customOrderType: 'price-match',
-    itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
-    amount: '399.00',
+    checkout: { title: 'GeForce RTX 4060 Ti', merchant: 'Newegg', price: 399 },
   },
   { id: 3, role: 'user', text: 'My PayPal is low. Protect my important subs.', time: '9:43 AM' },
   {
@@ -69,18 +79,60 @@ function nowLabel() {
   return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
+// Cheapest USD recommendation that has a real price
+function pickFromRecommendations(recs: unknown[]): CheckoutItem | null {
+  let best: CheckoutItem | null = null
+  for (const rec of recs ?? []) {
+    const r = rec as {
+      title?: string
+      merchant?: string | null
+      price?: number | string | null
+      currency?: string
+    }
+    const price = typeof r.price === 'string' ? parseFloat(r.price) : r.price
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) continue
+    if (r.currency && r.currency.toUpperCase() !== 'USD') continue
+    if (!best || price < best.price) {
+      best = { title: r.title ?? 'Item', price, merchant: r.merchant ?? 'Online' }
+    }
+  }
+  return best
+}
+
+// Use the agent's recommendations first; fall back to live Tavily results
+async function findCheckoutItem(command: string, payload: AgentPayload): Promise<CheckoutItem | null> {
+  const fromAgent = pickFromRecommendations(payload.recommendations)
+  if (fromAgent) return fromAgent
+  try {
+    const res = await fetch('/api/tavily-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: command }),
+    })
+    const data = await res.json()
+    const best = (data.offers ?? []).find((o: any) => typeof o.price === 'number' && o.price > 0)
+    if (!best) return null
+    return {
+      title: String(best.title).slice(0, 80),
+      price: best.price,
+      merchant: best.merchant,
+      url: best.url,
+    }
+  } catch {
+    return null
+  }
+}
+
 export function AgentPrompt() {
   const [mounted, setMounted] = useState(false)
   const [value, setValue] = useState('')
   const [listening, setListening] = useState(false)
   const [messages, setMessages] = useState<Message[]>(history)
   const [busy, setBusy] = useState(false)
-  
-  // Custom checkout states
+
+  // Starbucks demo flow
   const [starbucksStep, setStarbucksStep] = useState<'size' | 'checkout' | 'ordered'>('size')
   const [selectedSize, setSelectedSize] = useState({ label: 'Venti', price: '6.45' })
-  const [priceMatchStep, setPriceMatchStep] = useState<'initial' | 'checkout' | 'ordered'>('initial')
-  const [airpodsStep, setAirpodsStep] = useState<'initial' | 'checkout' | 'ordered'>('initial')
 
   const streamRef = useRef<HTMLOListElement>(null)
   const idRef = useRef(history.length)
@@ -125,10 +177,12 @@ export function AgentPrompt() {
 
     const lowerCmd = command.toLowerCase()
 
-    // Intent Matching
+    // Intent matching
     const isStarbucks = lowerCmd.includes('starbucks') || lowerCmd.includes('latte') || lowerCmd.includes('coffee')
-    const isAirpodsQuery = lowerCmd.includes('airpods')
-    const isOrderFollowUp = lowerCmd.includes('order') || lowerCmd.includes('buy') || lowerCmd.includes('checkout')
+    const isOrderIntent = /\b(order|buy|purchase|check\s?out|checkout)\b/.test(lowerCmd)
+    const refersToLast =
+      /\b(it|that|this|them|those|one)\b/.test(lowerCmd) || lowerCmd.split(/\s+/).length <= 3
+    const isPriceIntent = /\b(price|prices|cheap|cheaper|cheapest|compare|deal|deals|best|find|cost|lowest)\b/.test(lowerCmd)
 
     if (isStarbucks) {
       setMessages((prev: Message[]) => [
@@ -161,64 +215,28 @@ export function AgentPrompt() {
       return
     }
 
-    if (isAirpodsQuery && !isOrderFollowUp) {
+    // "Order it" / "buy that": check out the last product compared or scanned
+    if (isOrderIntent && refersToLast) {
+      const last = getCheckoutItem()
       setMessages((prev: Message[]) => [
         ...prev,
         { id: userId, role: 'user', text: command, time },
         {
           id: agentId,
           role: 'agent',
-          text: 'Current deals show AirPods Pro 2 cheapest on Amazon at $159.99, while Best Buy and Walmart list them around $169.99. Savings of about $10 (~6%) if you buy from Amazon.',
+          text: last
+            ? `Ready for 1-Click PayPal Checkout: ${last.title} from ${last.merchant} at $${last.price.toFixed(2)}.`
+            : "I don't have a product queued up yet. Ask me to compare prices for something, or scan an item, and I'll set up checkout.",
           time,
           pending: false,
-          customOrderType: 'airpods',
-          itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
-          amount: '159.99',
+          checkout: last ?? undefined,
         },
       ])
       setBusy(false)
       return
     }
 
-    if (isOrderFollowUp && (lowerCmd.includes('airpods') || lowerCmd.includes('amazon') || airpodsStep !== 'initial')) {
-      setMessages((prev: Message[]) => [
-        ...prev,
-        { id: userId, role: 'user', text: command, time },
-        {
-          id: agentId,
-          role: 'agent',
-          text: 'Found best verified price for AirPods Pro 2 on Amazon ($159.99). Ready for 1-Click PayPal Checkout:',
-          time,
-          pending: false,
-          customOrderType: 'airpods',
-          itemTitle: 'Apple AirPods Pro (2nd Gen) - Amazon',
-          amount: '159.99',
-        },
-      ])
-      setBusy(false)
-      return
-    }
-
-    if (isOrderFollowUp) {
-      setMessages((prev: Message[]) => [
-        ...prev,
-        { id: userId, role: 'user', text: command, time },
-        {
-          id: agentId,
-          role: 'agent',
-          text: 'Found best matched price item ($399.00). Ready for 1-Click PayPal Checkout:',
-          time,
-          pending: false,
-          customOrderType: 'price-match',
-          itemTitle: 'GeForce RTX 4060 Ti (Newegg)',
-          amount: '399.00',
-        },
-      ])
-      setBusy(false)
-      return
-    }
-
-    // Default API path for other general queries
+    // General path: live agent, then attach a checkout for the cheapest real offer
     setMessages((prev: Message[]) => [
       ...prev,
       { id: userId, role: 'user', text: command, time },
@@ -235,7 +253,7 @@ export function AgentPrompt() {
       const res = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: command, context: dashboardContext }),
+        body: JSON.stringify({ query: command, context: buildContext() }),
       })
       const data = (await res.json()) as AgentPayload | AgentError
 
@@ -246,18 +264,23 @@ export function AgentPrompt() {
         const errorMsg = errObj?.error || `Request failed (${res.status})`
         setMessages((prev: Message[]) =>
           prev.map((m: Message) =>
-            m.id === agentId
-              ? { ...m, pending: false, text: errorMsg, error: errorMsg }
-              : m,
+            m.id === agentId ? { ...m, pending: false, text: errorMsg, error: errorMsg } : m,
           ),
         )
         return
       }
 
+      let item: CheckoutItem | null = null
+      if (isPriceIntent || isOrderIntent) {
+        item = await findCheckoutItem(command, data)
+        if (requestId !== requestRef.current) return
+        if (item) setCheckoutItem(item)
+      }
+
       setMessages((prev: Message[]) =>
         prev.map((m: Message) =>
           m.id === agentId
-            ? { ...m, pending: false, text: data.summary, payload: data }
+            ? { ...m, pending: false, text: data.summary, payload: data, checkout: item ?? undefined }
             : m,
         ),
       )
@@ -327,79 +350,8 @@ export function AgentPrompt() {
                 <span>{m.text}</span>
               </p>
 
-              {/* Price Match Flow (RTX Card) */}
-              {m.customOrderType === 'price-match' && (
-                <div className="mt-3 rounded-2xl border border-primary/30 bg-background/60 p-3 space-y-3">
-                  {priceMatchStep === 'initial' ? (
-                    <div className="space-y-2">
-                      <div>
-                        <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                        <div className="text-[11px] text-emerald-400">$399.00 · Price Matched ($50 Savings)</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPriceMatchStep('checkout')}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
-                      >
-                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
-                      </button>
-                    </div>
-                  ) : priceMatchStep === 'checkout' ? (
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs font-semibold">
-                        <span>{m.itemTitle}</span>
-                        <span className="text-primary">$399.00</span>
-                      </div>
-                      <QuickOPayPalCheckout
-                        amount="399.00"
-                        itemTitle={m.itemTitle || 'GeForce RTX 4060 Ti'}
-                        onSuccess={() => setPriceMatchStep('ordered')}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
-                      <CheckCircle2 className="size-4" /> Ordered! Confirmation sent via PayPal.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* AirPods Flow */}
-              {m.customOrderType === 'airpods' && (
-                <div className="mt-3 rounded-2xl border border-primary/30 bg-background/60 p-3 space-y-3">
-                  {airpodsStep === 'initial' ? (
-                    <div className="space-y-2">
-                      <div>
-                        <div className="text-xs font-semibold text-foreground">{m.itemTitle}</div>
-                        <div className="text-[11px] text-emerald-400">$159.99 · Lowest Verified Price (~6% Savings)</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAirpodsStep('checkout')}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
-                      >
-                        <ShoppingBag className="size-3.5" /> Continue to 1-Click Checkout
-                      </button>
-                    </div>
-                  ) : airpodsStep === 'checkout' ? (
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center text-xs font-semibold">
-                        <span>{m.itemTitle}</span>
-                        <span className="text-primary">$159.99</span>
-                      </div>
-                      <QuickOPayPalCheckout
-                        amount="159.99"
-                        itemTitle={m.itemTitle || 'Apple AirPods Pro (2nd Gen)'}
-                        onSuccess={() => setAirpodsStep('ordered')}
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 py-1">
-                      <CheckCircle2 className="size-4" /> Ordered! AirPods Pro 2 ordered successfully via PayPal.
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Dynamic checkout for whatever product was compared, scanned, or asked for */}
+              {m.checkout && !m.pending && <ProductCheckout item={m.checkout} />}
 
               {/* In-Chat Starbucks Order Card */}
               {m.customOrderType === 'starbucks' && !m.pending && (
