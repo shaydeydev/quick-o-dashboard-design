@@ -11,26 +11,10 @@ export type Order = {
   status: OrderStatus;
 };
 
-const seed: Order[] = [
-  {
-    id: "seed-rtx",
-    title: "GeForce RTX 4060 Ti",
-    merchant: "Newegg",
-    price: 399,
-    method: "1-Click PayPal",
-    status: "Delivered",
-  },
-  {
-    id: "seed-sony",
-    title: "Sony WH-1000XM5 Headphones",
-    merchant: "Walmart",
-    price: 329,
-    method: "Checkout",
-    status: "In Transit",
-  },
-];
+// Starts empty. Orders only appear after a real (sandbox) PayPal purchase.
+const initial: Order[] = [];
 
-let orders: Order[] = seed;
+let orders: Order[] = initial;
 const listeners = new Set<() => void>();
 
 function subscribe(cb: () => void) {
@@ -46,7 +30,7 @@ export function addOrder(input: {
   method?: string;
 }) {
   const order: Order = {
-    id: `order-${Date.now()}`,
+    id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title: input.title,
     merchant: input.merchant,
     price: input.price,
@@ -59,5 +43,5 @@ export function addOrder(input: {
 }
 
 export function useOrders() {
-  return useSyncExternalStore(subscribe, () => orders, () => seed);
+  return useSyncExternalStore(subscribe, () => orders, () => initial);
 }
