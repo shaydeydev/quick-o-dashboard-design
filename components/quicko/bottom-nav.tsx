@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Bell, Home, Repeat, ShoppingBag, Wallet, X, CreditCard, CheckCircle2, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOrders, type OrderStatus } from '@/lib/orders-store'
+import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
 
 type NavItem = { label: string; icon: LucideIcon; badge?: number }
 
@@ -14,9 +16,17 @@ const items: NavItem[] = [
   { label: 'Alerts', icon: Bell, badge: 2 },
 ]
 
+const orderStatusClass: Record<OrderStatus, string> = {
+  Delivered: 'bg-emerald-500/20 text-emerald-400',
+  'In Transit': 'bg-blue-500/20 text-blue-400',
+  Processing: 'bg-amber-500/20 text-amber-400',
+}
+
 export function BottomNav() {
   const [activeTab, setActiveTab] = useState('Home')
   const [activeModal, setActiveModal] = useState<string | null>(null)
+  const orders = useOrders()
+  const { items: subscriptions, paused } = useSubscriptions()
 
   const handleNavClick = (label: string) => {
     setActiveTab(label)
@@ -78,52 +88,79 @@ export function BottomNav() {
               <X className="size-5" />
             </button>
 
-            {/* Orders Tab View */}
+            {/* Orders Tab View (live from the shared store) */}
             {activeModal === 'Orders' && (
               <div>
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
                   <ShoppingBag className="size-5 text-primary" /> Order History
                 </h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">GeForce RTX 4060 Ti</div>
-                      <div className="text-xs text-emerald-400">$399.00 · Price Matched & Paid via PayPal</div>
+                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                  {orders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">{order.title}</div>
+                        <div className="text-xs text-muted-foreground">
+                          ${order.price.toFixed(2)} · {order.merchant} · {order.method}
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium',
+                          orderStatusClass[order.status],
+                        )}
+                      >
+                        {order.status}
+                      </span>
                     </div>
-                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Processing</span>
-                  </div>
-                  <div className="flex justify-between items-center rounded-2xl border border-white/5 bg-white/5 p-4 opacity-75">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">Starbucks Pumpkin Spice Latte</div>
-                      <div className="text-xs text-muted-foreground">$6.45 · Venti · Delivered</div>
-                    </div>
-                    <span className="rounded-full bg-blue-500/20 px-2.5 py-1 text-[10px] font-medium text-blue-400">Completed</span>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Subs Tab View */}
+            {/* Subs Tab View (live from the shared store) */}
             {activeModal === 'Subs' && (
               <div>
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
                   <Repeat className="size-5 text-primary" /> Subscription Priority Guard
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">Amazon Prime</div>
-                      <div className="text-xs text-muted-foreground">$14.00/mo · Priority 1 (Protected)</div>
-                    </div>
-                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-medium text-emerald-400">Active</span>
-                  </div>
-                  <div className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">Spotify Premium</div>
-                      <div className="text-xs text-muted-foreground">$10.99/mo · Priority 2</div>
-                    </div>
-                    <span className="rounded-full bg-purple-500/20 px-2.5 py-1 text-[10px] font-medium text-purple-300">Active</span>
-                  </div>
+                  {subscriptions.map((sub, index) => {
+                    const isPaused = !!paused[sub.id]
+                    return (
+                      <div
+                        key={sub.id}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{sub.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            ${sub.price}/mo · Priority {index + 1}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span
+                            className={cn(
+                              'rounded-full px-2.5 py-1 text-[10px] font-medium',
+                              isPaused ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400',
+                            )}
+                          >
+                            {isPaused ? 'Paused' : 'Active'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => togglePause(sub.id)}
+                            aria-label={isPaused ? `Resume ${sub.name}` : `Pause ${sub.name}`}
+                            className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                          >
+                            {isPaused ? 'Resume' : 'Pause'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

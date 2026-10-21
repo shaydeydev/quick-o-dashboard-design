@@ -10,10 +10,20 @@ import {
   X,
   Check,
 } from 'lucide-react'
+import { useOrders, type OrderStatus } from '@/lib/orders-store'
+import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
+
+const orderStatusClass: Record<OrderStatus, string> = {
+  Delivered: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+  'In Transit': 'border-blue-500/20 bg-blue-500/10 text-blue-400',
+  Processing: 'border-amber-500/20 bg-amber-500/10 text-amber-400',
+}
 
 export function AppHeader() {
   const [activeTab, setActiveTab] = useState('home')
   const [activeModal, setActiveModal] = useState<string | null>(null)
+  const orders = useOrders()
+  const { items: subscriptions, paused } = useSubscriptions()
 
   const handleNavClick = (id: string) => {
     setActiveTab(id)
@@ -185,73 +195,70 @@ export function AppHeader() {
 
             {/* Modal Content */}
             <div className="py-2">
-              {/* Orders */}
+              {/* Orders (live from the shared store) */}
               {activeModal === 'orders' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3.5">
-                    <div>
-                      <p className="text-xs font-semibold text-white">
-                        GeForce RTX 4060 Ti
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Merchant: Newegg | 1-Click PayPal
-                      </p>
+                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                  {orders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-white">{order.title}</p>
+                        <p className="text-[11px] text-slate-400">
+                          Merchant: {order.merchant} | ${order.price.toFixed(2)} | {order.method}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${orderStatusClass[order.status]}`}
+                      >
+                        {order.status}
+                      </span>
                     </div>
-
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-400">
-                      Delivered
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3.5">
-                    <div>
-                      <p className="text-xs font-semibold text-white">
-                        Sony WH-1000XM5 Headphones
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Merchant: Walmart | $329.00
-                      </p>
-                    </div>
-
-                    <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-[10px] font-bold text-blue-400">
-                      In Transit
-                    </span>
-                  </div>
+                  ))}
                 </div>
               )}
 
-              {/* Subscriptions */}
+              {/* Subscriptions (live from the shared store) */}
               {activeModal === 'subs' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3.5">
-                    <div>
-                      <p className="text-xs font-semibold text-white">
-                        Netflix Premium
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        $19.99/mo | Auto-Shield Pause
-                      </p>
-                    </div>
+                  {subscriptions.map((sub, index) => {
+                    const isPaused = !!paused[sub.id]
+                    return (
+                      <div
+                        key={sub.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/5 p-3.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white">{sub.name}</p>
+                          <p className="text-[11px] text-slate-400">
+                            ${sub.price}/mo | Priority {index + 1}
+                          </p>
+                        </div>
 
-                    <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400">
-                      Paused
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3.5">
-                    <div>
-                      <p className="text-xs font-semibold text-white">
-                        Amazon Prime
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        $14.99/mo | High Priority
-                      </p>
-                    </div>
-
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-400">
-                      Active
-                    </span>
-                  </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span
+                            className={
+                              isPaused
+                                ? 'rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-400'
+                                : 'rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-400'
+                            }
+                          >
+                            {isPaused ? 'Paused' : 'Active'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => togglePause(sub.id)}
+                            aria-label={isPaused ? `Resume ${sub.name}` : `Pause ${sub.name}`}
+                            className="cursor-pointer rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                          >
+                            {isPaused ? 'Resume' : 'Pause'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
