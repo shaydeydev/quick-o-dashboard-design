@@ -55,19 +55,22 @@ export function ProductCheckout({
             </span>
             <span className="text-primary">${amount}</span>
           </div>
-          <QuickOPayPalCheckout
-            amount={amount}
-            itemTitle={`${item.title} (${item.merchant})`}
-            onSuccess={() => {
-              addOrder({
-                title: item.title,
-                merchant: item.merchant,
-                price: item.price,
-                method: '1-Click PayPal',
-              })
-              setStep('ordered')
-            }}
-          />
+          {/* Cap the width so the PayPal button never stretches wider than it renders */}
+          <div className="mx-auto w-full max-w-md">
+            <QuickOPayPalCheckout
+              amount={amount}
+              itemTitle={`${item.title} (${item.merchant})`}
+              onSuccess={() => {
+                addOrder({
+                  title: item.title,
+                  merchant: item.merchant,
+                  price: item.price,
+                  method: '1-Click PayPal',
+                })
+                setStep('ordered')
+              }}
+            />
+          </div>
         </div>
       )}
 
