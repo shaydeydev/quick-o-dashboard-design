@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ShoppingBag, CheckCircle2 } from 'lucide-react'
 import QuickOPayPalCheckout from './paypal-button'
 import type { CheckoutItem } from '@/lib/checkout-store'
+import { addOrder } from '@/lib/orders-store'
 
 type Step = 'initial' | 'checkout' | 'ordered'
 
@@ -57,7 +58,15 @@ export function ProductCheckout({
           <QuickOPayPalCheckout
             amount={amount}
             itemTitle={`${item.title} (${item.merchant})`}
-            onSuccess={() => setStep('ordered')}
+            onSuccess={() => {
+              addOrder({
+                title: item.title,
+                merchant: item.merchant,
+                price: item.price,
+                method: '1-Click PayPal',
+              })
+              setStep('ordered')
+            }}
           />
         </div>
       )}

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import QuickOPayPalCheckout from './paypal-button'
 import { ProductCheckout } from './product-checkout'
 import { getCheckoutItem, setCheckoutItem, type CheckoutItem } from '@/lib/checkout-store'
+import { addOrder } from '@/lib/orders-store'
 
 const suggestions = ['Reorder coffee beans', 'Find cheaper RTX card', 'Pause Netflix', 'Order Pumpkin Spice Latte from Starbucks']
 
@@ -397,7 +398,15 @@ export function AgentPrompt() {
                       <QuickOPayPalCheckout
                         amount={selectedSize.price}
                         itemTitle={`Starbucks Pumpkin Spice Latte (${selectedSize.label})`}
-                        onSuccess={() => setStarbucksStep('ordered')}
+                        onSuccess={() => {
+                          addOrder({
+                            title: `Starbucks Pumpkin Spice Latte (${selectedSize.label})`,
+                            merchant: 'Starbucks',
+                            price: parseFloat(selectedSize.price),
+                            method: '1-Click PayPal',
+                          })
+                          setStarbucksStep('ordered')
+                        }}
                       />
                     </div>
                   ) : (
