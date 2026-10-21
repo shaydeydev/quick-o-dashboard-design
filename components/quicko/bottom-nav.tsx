@@ -1,19 +1,20 @@
 "use client"
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell, Home, Repeat, ShoppingBag, Wallet, X, CreditCard, CheckCircle2, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOrders, type OrderStatus } from '@/lib/orders-store'
 import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
 
-type NavItem = { label: string; icon: LucideIcon; badge?: number }
+type NavItem = { label: string; icon: LucideIcon }
 
 const items: NavItem[] = [
   { label: 'Home', icon: Home },
   { label: 'Orders', icon: ShoppingBag },
   { label: 'Subs', icon: Repeat },
   { label: 'Wallet', icon: Wallet },
-  { label: 'Alerts', icon: Bell, badge: 2 },
+  { label: 'Alerts', icon: Bell },
 ]
 
 const orderStatusClass: Record<OrderStatus, string> = {
@@ -22,11 +23,31 @@ const orderStatusClass: Record<OrderStatus, string> = {
   Processing: 'bg-amber-500/20 text-amber-400',
 }
 
+// 14 -> "14", 9.99 -> "9.99"
+function fmtPrice(n: number) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
+}
+
+function EmptyState({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-center">
+      <div className="text-sm font-semibold text-foreground">{title}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+    </div>
+  )
+}
+
 export function BottomNav() {
   const [activeTab, setActiveTab] = useState('Home')
   const [activeModal, setActiveModal] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
   const orders = useOrders()
   const { items: subscriptions, paused } = useSubscriptions()
+
+  const closeModal = () => {
+    setActiveModal(null)
+    setActiveTab('Home')
+  }
 
   const handleNavClick = (label: string) => {
     setActiveTab(label)
@@ -37,14 +58,35 @@ export function BottomNav() {
     }
   }
 
-  return (
+  // Portal needs the browser, so wait until mounted
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Escape closes the sheet
+  useEffect(() => {
+    if (!activeModal) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveModal(null)
+        setActiveTab('Home')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeModal])
+
+  if (!mounted) return null
+
+  // Portal to <body> so no parent box can shrink or move the fixed bar
+  return createPortal(
     <>
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-md px-5 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        className="fixed bottom-0 left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden"
       >
-        <ul className="glass flex items-center justify-between rounded-full bg-background/70 p-1.5">
-          {items.map(({ label, icon: Icon, badge }) => {
+        <ul className="glass flex w-full items-center justify-between rounded-full bg-background/70 p-1.5">
+          {items.map(({ label, icon: Icon }) => {
             const isActive = activeTab === label
             return (
               <li key={label} className="flex-1">
@@ -53,19 +95,11 @@ export function BottomNav() {
                   onClick={() => handleNavClick(label)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'flex w-full flex-col items-center gap-0.5 rounded-full py-2 text-[10px] font-medium transition-colors',
+                    'flex w-full flex-col items-center gap-1 rounded-full py-2.5 text-[11px] font-medium transition-colors',
                     isActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <span className="relative">
-                    <Icon className="size-4" aria-hidden="true" />
-                    {badge ? (
-                      <span className="absolute -right-2 -top-1.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground shadow-[0_0_8px_var(--color-primary)] ring-2 ring-background">
-                        {badge}
-                        <span className="sr-only"> unread</span>
-                      </span>
-                    ) : null}
-                  </span>
+                  <Icon className="size-5" aria-hidden="true" />
                   {label}
                 </button>
               </li>
@@ -76,16 +110,20 @@ export function BottomNav() {
 
       {/* Interactive Bottom Sheet Modals */}
       {activeModal && (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center">
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center md:hidden">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeModal}
+            className="relative w-full max-w-md rounded-3xl border border-white/10 bg-card p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4"
+          >
             <button
-              onClick={() => {
-                setActiveModal(null)
-                setActiveTab('Home')
-              }}
+              type="button"
+              onClick={closeModal}
+              aria-label="Close"
               className="absolute right-4 top-4 rounded-full bg-white/5 p-2 text-muted-foreground hover:text-foreground"
             >
-              <X className="size-5" />
+              <X className="size-5" aria-hidden="true" />
             </button>
 
             {/* Orders Tab View (live from the shared store) */}
@@ -94,29 +132,33 @@ export function BottomNav() {
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
                   <ShoppingBag className="size-5 text-primary" /> Order History
                 </h3>
-                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
-                  {orders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-foreground">{order.title}</div>
-                        <div className="text-xs text-muted-foreground">
-                          ${order.price.toFixed(2)} · {order.merchant} · {order.method}
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium',
-                          orderStatusClass[order.status],
-                        )}
+                {orders.length === 0 ? (
+                  <EmptyState title="No orders yet" hint="Scan an item and buy it. It shows up here." />
+                ) : (
+                  <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                    {orders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
                       >
-                        {order.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">{order.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            ${order.price.toFixed(2)} · {order.merchant} · {order.method}
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium',
+                            orderStatusClass[order.status],
+                          )}
+                        >
+                          {order.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -126,7 +168,7 @@ export function BottomNav() {
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
                   <Repeat className="size-5 text-primary" /> Subscription Priority Guard
                 </h3>
-                <div className="space-y-3">
+                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                   {subscriptions.map((sub, index) => {
                     const isPaused = !!paused[sub.id]
                     return (
@@ -135,9 +177,9 @@ export function BottomNav() {
                         className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4"
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-foreground">{sub.name}</div>
+                          <div className="truncate text-sm font-semibold text-foreground">{sub.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            ${sub.price}/mo · Priority {index + 1}
+                            ${fmtPrice(sub.price)}/mo · Priority {index + 1}
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -196,27 +238,19 @@ export function BottomNav() {
               </div>
             )}
 
-            {/* Alerts Tab View */}
+            {/* Alerts Tab View (no fake alerts) */}
             {activeModal === 'Alerts' && (
               <div>
                 <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
-                  <Bell className="size-5 text-primary" /> Active Notifications
+                  <Bell className="size-5 text-primary" /> Notifications
                 </h3>
-                <div className="space-y-3">
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                    <div className="text-sm font-semibold text-emerald-400">Price Drop Alert!</div>
-                    <div className="mt-1 text-xs text-muted-foreground">GeForce RTX 4060 Ti fell by $50.00. 1-Click Price Match ready.</div>
-                  </div>
-                  <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-4">
-                    <div className="text-sm font-semibold text-purple-300">Upcoming Renewal</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Amazon Prime ($14.00) renews in 5 days. QuickO Priority Guard active.</div>
-                  </div>
-                </div>
+                <EmptyState title="No alerts right now" hint="Nothing needs you. All good." />
               </div>
             )}
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body,
   )
 }
