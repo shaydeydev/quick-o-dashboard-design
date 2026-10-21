@@ -9,9 +9,11 @@ import {
   Bell,
   X,
   Check,
+  PiggyBank,
 } from 'lucide-react'
 import { useOrders, type OrderStatus } from '@/lib/orders-store'
 import { useSubscriptions, togglePause } from '@/lib/subscriptions-store'
+import { useSavings } from '@/lib/savings-store'
 
 const orderStatusClass: Record<OrderStatus, string> = {
   Delivered: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
@@ -24,6 +26,7 @@ export function AppHeader() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
   const orders = useOrders()
   const { items: subscriptions, paused } = useSubscriptions()
+  const saved = useSavings()
 
   const handleNavClick = (id: string) => {
     setActiveTab(id)
@@ -112,6 +115,23 @@ export function AppHeader() {
 
         {/* User Actions */}
         <div className="flex items-center gap-3">
+          {/* Savings counter. Announced to screen readers when it changes. */}
+          <div
+            role="status"
+            aria-live="polite"
+            className={
+              saved > 0
+                ? 'flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 transition-colors'
+                : 'flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-400 transition-colors'
+            }
+          >
+            <PiggyBank className="h-4 w-4" aria-hidden="true" />
+            <span>
+              You saved ${saved.toFixed(2)}
+              <span className="hidden sm:inline"> this session</span>
+            </span>
+          </div>
+
           <button
             type="button"
             onClick={() => handleNavClick('alerts')}
