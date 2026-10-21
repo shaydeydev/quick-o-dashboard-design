@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { setCheckoutItem, type CheckoutItem } from "@/lib/checkout-store";
 import { setScanPhase } from "@/lib/scan-store";
 import { speak, stopSpeaking } from "@/lib/speak";
+import { setArExpanded, useArExpanded } from "@/lib/ar-store";
+import { priceShelfItems, toShelfItems, type ShelfItem } from "@/lib/shelf";
 import { ProductCheckout } from "./product-checkout";
+import { ShelfResults } from "./shelf-results";
 
 type Stage = "standby" | "camera" | "vision" | "pricing" | "success" | "error";
+type Mode = "single" | "shelf";
 
 type Box = { x: number; y: number; w: number; h: number; found: boolean };
 
@@ -40,7 +45,15 @@ const MH = 18;
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#12141c]";
 
+function shelfBoxClass(status: ShelfItem["status"]) {
+  if (status === "pending")
+    return "border-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.7)] motion-safe:animate-pulse";
+  if (status === "priced") return "border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]";
+  return "border-white/60";
+}
+
 export default function PhysicalAIScanner() {
+  const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const motionCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,12 +66,23 @@ export default function PhysicalAIScanner() {
   const armedRef = useRef(true);
   const scanRef = useRef<() => void>(() => {});
 
+  // Lets a newer scan (or Stop) cancel older shelf price lookups
+  const scanIdRef = useRef(0);
+  const stageRef = useRef<Stage>("standby");
+  const prevExpandedRef = useRef(false);
+
+  const expanded = useArExpanded();
+
   const [stage, setStage] = useState<Stage>("standby");
+  const [mode, setMode] = useState<Mode>("single");
   const [product, setProduct] = useState<any>(null);
   const [offers, setOffers] = useState<any[]>([]);
   const [scanItem, setScanItem] = useState<CheckoutItem | null>(null);
   const [savings, setSavings] = useState(0);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [shelfItems, setShelfItems] = useState<ShelfItem[]>([]);
+  const [shelfScanId, setShelfScanId] = useState(0);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [voiceOn, setVoiceOn] = useState(false); // off by default
   const [autoScan, setAutoScan] = useState(false); // off by default
@@ -66,6 +90,11 @@ export default function PhysicalAIScanner() {
   const [box, setBox] = useState<Box | null>(null);
   const [overlayOn, setOverlayOn] = useState(true);
   const [statusMsg, setStatusMsg] = useState("Camera is off.");
+
+  stageRef.current = stage;
+
+  const live = stage !== "standby" && stage !== "error";
+  const busy = stage === "vision" || stage === "pricing";
 
   // Keep the shared scan phase in sync (the 3D background reacts to this)
   useEffect(() => {
@@ -98,7 +127,7 @@ export default function PhysicalAIScanner() {
       await video.play();
       armedRef.current = true;
       setStage("camera");
-      setStatusMsg("Camera is live. Point it at a product and press Scan Item.");
+      setStatusMsg("Camera is live. Point it at a product and press Scan.");
     } catch (e: any) {
       const msg = e.message || "Could not access camera";
       setError(msg);
@@ -109,37 +138,124 @@ export default function PhysicalAIScanner() {
 
   useEffect(() => stopCamera, [stopCamera]);
 
-  const capture = (): string | null => {
+  // AR button / Expand: scroll the scanner into view and start the camera if it is off
+  useEffect(() => {
+    if (expanded && !prevExpandedRef.current) {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      rootRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      if (stageRef.current === "standby") {
+        void startCamera();
+      } else {
+        setStatusMsg("Scanner enlarged.");
+      }
+    } else if (!expanded && prevExpandedRef.current) {
+      setStatusMsg("Scanner back to normal size.");
+    }
+    prevExpandedRef.current = expanded;
+  }, [expanded, startCamera]);
+
+  const capture = (maxWidth: number): string | null => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth) return null;
-    const scale = Math.min(1, 800 / video.videoWidth);
+    const scale = Math.min(1, maxWidth / video.videoWidth);
     canvas.width = video.videoWidth * scale;
     canvas.height = video.videoHeight * scale;
     canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/jpeg", 0.8);
   };
 
-  const scan = async () => {
-    armedRef.current = false; // need camera movement before the next auto scan
-    steadyMsRef.current = 0;
-    setHold(0);
+  const resetResults = () => {
     setError(null);
+    setNotice("");
     setOffers([]);
     setProduct(null);
     setScanItem(null);
     setSavings(0);
     setShowCheckout(false);
-    setCheckoutItem(null);
     setBox(null);
+    setShelfItems([]);
     setOverlayOn(true);
-    const image = capture();
+  };
+
+  // ---------- Shelf mode: many products, one payment ----------
+  const scanShelf = async (image: string, myScan: number) => {
+    try {
+      setStage("vision");
+      setStatusMsg("Looking at the shelf…");
+      const res = await fetch("/api/shelf-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Shelf scan failed");
+      if (myScan !== scanIdRef.current) return;
+
+      const items = toShelfItems(data.items ?? []);
+      if (items.length === 0) {
+        const msg = "No products found. Move closer, add light, and try again.";
+        setNotice(msg);
+        setStatusMsg(msg);
+        setStage("camera");
+        return;
+      }
+
+      setShelfItems(items);
+      setShelfScanId(myScan);
+      setStage("pricing");
+      setStatusMsg(`Found ${items.length} products. Looking up prices…`);
+
+      let local = items;
+      await priceShelfItems(
+        items,
+        (id, patch) => {
+          local = local.map((it) => (it.id === id ? { ...it, ...patch } : it));
+          setShelfItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+        },
+        () => myScan !== scanIdRef.current,
+      );
+      if (myScan !== scanIdRef.current) return;
+
+      setStage("success");
+      const priced = local.filter((it) => it.status === "priced");
+      const total = priced.reduce((sum, it) => sum + it.price, 0);
+      const msg =
+        priced.length > 0
+          ? `Found ${local.length} products. ${priced.length} priced, ${total.toFixed(2)} dollars in total.`
+          : `Found ${local.length} products, but no verified prices.`;
+      setStatusMsg(msg);
+      if (voiceOn) speak(msg);
+    } catch (e: any) {
+      if (myScan !== scanIdRef.current) return;
+      setError(e.message);
+      setStatusMsg(`Scan failed: ${e.message}`);
+      setStage("error");
+      if (voiceOn) speak("Scan failed. Please try again.");
+    }
+  };
+
+  const scan = async () => {
+    armedRef.current = false; // need camera movement before the next auto scan
+    steadyMsRef.current = 0;
+    setHold(0);
+    const myScan = ++scanIdRef.current;
+    resetResults();
+    setCheckoutItem(null);
+
+    const image = capture(mode === "shelf" ? 1280 : 800);
     if (!image) {
       setError("Camera isn't ready yet");
       setStatusMsg("Camera isn't ready yet.");
       setStage("error");
       return;
     }
+
+    if (mode === "shelf") {
+      await scanShelf(image, myScan);
+      return;
+    }
+
     try {
       setStage("vision");
       setStatusMsg("Analyzing image…");
@@ -243,7 +359,7 @@ export default function PhysicalAIScanner() {
         movingFramesRef.current += 1;
         if (movingFramesRef.current >= 2) {
           armedRef.current = true;
-          setOverlayOn(false); // old box no longer matches the picture
+          setOverlayOn(false); // old boxes no longer match the picture
         }
         return;
       }
@@ -281,13 +397,23 @@ export default function PhysicalAIScanner() {
     });
   };
 
-  const live = stage !== "standby" && stage !== "error";
-  const busy = stage === "vision" || stage === "pricing";
+  const changeMode = (next: Mode) => {
+    if (next === mode || busy) return;
+    scanIdRef.current += 1;
+    resetResults();
+    setMode(next);
+    if (stage === "success") setStage("camera");
+    setStatusMsg(
+      next === "shelf"
+        ? "Shelf mode. Show several products and press Scan Shelf."
+        : "Single item mode. Point at one product and press Scan Item.",
+    );
+  };
 
-  // Cheapest few priced offers become floating badges
+  // Cheapest few priced offers become floating badges (single mode)
   const badges = offers.filter((o) => o.price).slice(0, 3);
 
-  // Box color follows the scan stage
+  // Box color follows the scan stage (single mode)
   const boxColor =
     stage === "vision"
       ? "border-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.7)]"
@@ -295,18 +421,35 @@ export default function PhysicalAIScanner() {
       ? "border-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.7)]"
       : "border-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.7)]";
 
-  const showGuide = live && !box && (stage === "camera" || stage === "vision");
-  const showBox = live && box && overlayOn && stage !== "camera";
+  const showGuide = live && mode === "single" && !box && (stage === "camera" || stage === "vision");
+  const showBox = live && mode === "single" && box && overlayOn && stage !== "camera";
+  const showShelfWait = live && mode === "shelf" && stage === "vision";
+  const showShelfBoxes =
+    live && mode === "shelf" && overlayOn && (stage === "pricing" || stage === "success");
+
+  const scanLabel = mode === "shelf" ? "Scan Shelf" : "Scan Item";
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#12141c]/70 p-3 backdrop-blur-xl sm:flex-row">
+    <div
+      ref={rootRef}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && expanded) setArExpanded(false);
+      }}
+      className={`flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#12141c]/70 p-3 backdrop-blur-xl ${
+        expanded ? "" : "sm:flex-row"
+      }`}
+    >
       {/* Screen-reader announcements for every stage */}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {statusMsg}
       </div>
 
       {/* Camera preview with fake-AR overlay */}
-      <div className="relative aspect-video w-full shrink-0 self-start overflow-hidden rounded-xl bg-black sm:w-72">
+      <div
+        className={`relative aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-black ${
+          expanded ? "max-w-4xl self-center" : "self-start sm:w-72"
+        }`}
+      >
         <video
           ref={videoRef}
           playsInline
@@ -336,7 +479,12 @@ export default function PhysicalAIScanner() {
             />
           )}
 
-          {/* Box that locks on the product */}
+          {/* Shelf mode: whole frame pulses while the model looks */}
+          {showShelfWait && (
+            <div className="absolute inset-2 rounded-lg border-2 border-dashed border-cyan-300 motion-safe:animate-pulse" />
+          )}
+
+          {/* Single mode: box that locks on the product */}
           {showBox && box && (
             <div
               className={`absolute rounded-md border-2 transition-all duration-300 ${boxColor} ${
@@ -381,6 +529,33 @@ export default function PhysicalAIScanner() {
             </div>
           )}
 
+          {/* Shelf mode: numbered boxes, price shows when it lands */}
+          {showShelfBoxes &&
+            shelfItems.map(
+              (it, i) =>
+                it.box && (
+                  <div
+                    key={it.id}
+                    className={`absolute rounded-md border-2 transition-all duration-300 ${shelfBoxClass(it.status)}`}
+                    style={{
+                      left: `${it.box.x * 100}%`,
+                      top: `${it.box.y * 100}%`,
+                      width: `${it.box.w * 100}%`,
+                      height: `${it.box.h * 100}%`,
+                    }}
+                  >
+                    <span className="absolute left-0 top-0 rounded-br bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {i + 1}
+                    </span>
+                    {it.status === "priced" && (
+                      <span className="absolute bottom-1 right-1 rounded-full bg-emerald-400 px-1.5 py-0.5 text-[10px] font-bold text-black shadow">
+                        ${it.price.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                ),
+            )}
+
           {/* Hold-steady progress */}
           {hold > 0 && (
             <div className="absolute inset-x-3 bottom-2">
@@ -406,7 +581,27 @@ export default function PhysicalAIScanner() {
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold tracking-tight text-white">Physical AI Scanner</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Scan mode"
+              className="flex rounded-lg border border-white/30 p-0.5"
+            >
+              {(["single", "shelf"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => changeMode(m)}
+                  disabled={busy}
+                  aria-pressed={mode === m}
+                  className={`rounded-md px-2.5 py-1 text-xs text-white disabled:opacity-60 ${focusRing} ${
+                    mode === m ? "bg-white/25 font-semibold" : "hover:bg-white/10"
+                  }`}
+                >
+                  {m === "single" ? "Single item" : "Shelf"}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={toggleVoice}
@@ -429,6 +624,20 @@ export default function PhysicalAIScanner() {
             >
               {autoScan ? "🎯 Auto-scan on" : "🎯 Auto-scan off"}
             </button>
+            <button
+              type="button"
+              onClick={() => setArExpanded(!expanded)}
+              aria-pressed={expanded}
+              aria-label="Big scanner view"
+              className={`flex items-center gap-1.5 rounded-lg border border-white/30 px-3 py-1.5 text-xs text-white hover:bg-white/10 ${focusRing}`}
+            >
+              {expanded ? (
+                <Minimize2 className="size-3.5" aria-hidden="true" />
+              ) : (
+                <Maximize2 className="size-3.5" aria-hidden="true" />
+              )}
+              {expanded ? "Make smaller" : "Expand"}
+            </button>
             {!live ? (
               <button
                 type="button"
@@ -445,13 +654,16 @@ export default function PhysicalAIScanner() {
                   disabled={busy}
                   className={`rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50 ${focusRing}`}
                 >
-                  {busy ? "Scanning…" : "Scan Item"}
+                  {busy ? "Scanning…" : scanLabel}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
+                    scanIdRef.current += 1; // cancel any price lookups still running
                     stopCamera();
                     setBox(null);
+                    setShelfItems([]);
+                    setNotice("");
                     setStage("standby");
                     setStatusMsg("Camera is off.");
                   }}
@@ -470,15 +682,26 @@ export default function PhysicalAIScanner() {
           </p>
         )}
 
-        {!product && !error && (
+        {notice && !error && <p className="text-xs text-amber-300">{notice}</p>}
+
+        {!product && shelfItems.length === 0 && !error && !notice && (
           <p className="text-xs text-slate-300">
-            {autoScan
+            {mode === "shelf"
+              ? autoScan
+                ? "Show a shelf with several products and hold steady. It finds each one and prices it."
+                : "Show a shelf with several products and hit Scan Shelf. Turn on Auto-scan to scan hands-free."
+              : autoScan
               ? "Point your camera at a product and hold steady. It scans by itself, or hit Scan Item."
               : "Point your camera at a product and hit Scan Item. Turn on Auto-scan to scan hands-free."}
           </p>
         )}
 
-        {product && (
+        {/* Shelf mode results: list, one payment for everything ticked */}
+        {mode === "shelf" && shelfItems.length > 0 && (
+          <ShelfResults key={shelfScanId} items={shelfItems} />
+        )}
+
+        {mode === "single" && product && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-white">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{product.name}</p>
@@ -506,7 +729,7 @@ export default function PhysicalAIScanner() {
           </div>
         )}
 
-        {offers.length > 1 && !showCheckout && (
+        {mode === "single" && offers.length > 1 && !showCheckout && (
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/80">
             {offers.slice(0, 4).map((o) => (
               <li key={o.url}>
@@ -525,7 +748,7 @@ export default function PhysicalAIScanner() {
         )}
 
         {/* PayPal opens right here for the scanned product */}
-        {showCheckout && scanItem && (
+        {mode === "single" && showCheckout && scanItem && (
           <ProductCheckout
             key={`${scanItem.title}-${scanItem.price}-${scanItem.merchant}`}
             item={scanItem}
