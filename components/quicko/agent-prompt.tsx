@@ -5,36 +5,99 @@ import { ArrowUp, Loader2, Mic, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ProductCheckout } from './product-checkout'
 import { getCheckoutItem, setCheckoutItem, type CheckoutItem } from '@/lib/checkout-store'
+import { getSubscriptions, setPaused } from '@/lib/subscriptions-store'
 
 const suggestions = [
-  'Pause Netflix',
+  'Pause Spotify',
   'Find cheaper RTX card',
   'Which subscription should I cut?',
   'Protect my Prime and Spotify',
 ]
 
+const PAYPAL_BALANCE = 30
+
 const baseContext = {
-  paypalBalance: 30,
+  paypalBalance: PAYPAL_BALANCE,
   productInView: {
     name: 'GeForce RTX 4060 Ti',
     merchants: { Amazon: 449, Newegg: 399 } as Record<string, number>,
   },
-  subscriptions: [
-    { name: 'Amazon Prime', price: 14, priority: 1, paused: false },
-    { name: 'Spotify', price: 11, priority: 2, paused: false },
-    { name: 'Netflix', price: 15, priority: 3, paused: true },
-  ],
 }
 
-// Use the product the user is actually looking at (from chat or scanner) when there is one
+// Use the product the user is actually looking at, and the real subscription state
 function buildContext() {
   const last = getCheckoutItem()
+  const subs = getSubscriptions()
   return {
     ...baseContext,
     productInView: last
       ? { name: last.title, merchants: { [last.merchant]: last.price } }
       : baseContext.productInView,
+    subscriptions: subs.items.map((s, i) => ({
+      name: s.name,
+      price: s.price,
+      priority: i + 1,
+      paused: !!subs.paused[s.id],
+    })),
   }
+}
+
+// Which subscriptions does the command talk about?
+function findSubscriptions(cmd: string) {
+  const subs = getSubscriptions().items
+  if (/\b(all|everything|every)\b/.test(cmd)) return subs
+  return subs.filter((s) => {
+    const name = s.name.toLowerCase()
+    if (cmd.includes(s.id) || cmd.includes(name)) return true
+    return name.split(/\s+/).some((w) => w.length > 3 && new RegExp('\\b' + w + '\\b').test(cmd))
+  })
+}
+
+function activeTotal() {
+  const { items, paused } = getSubscriptions()
+  return items.filter((s) => !paused[s.id]).reduce((sum, s) => sum + s.price, 0)
+}
+
+// Real pause / resume. Returns the reply text, or null if this is not a pause/resume command.
+function handleSubscriptionCommand(cmd: string): string | null {
+  // Questions go to the AI, they do not change anything
+  if (cmd.includes('?') || /^(should|can|could|would|what|which|why|how|is|do|does|will)\b/.test(cmd)) {
+    return null
+  }
+  const wantsResume = /\b(resume|unpause|reactivate|restart)\b/.test(cmd)
+  const wantsPause = /\bpause\b/.test(cmd)
+  if (!wantsResume && !wantsPause) return null
+
+  const all = getSubscriptions().items
+  const matched = findSubscriptions(cmd)
+  if (matched.length === 0) {
+    return `Which subscription? You have ${all.map((s) => s.name).join(', ')}.`
+  }
+
+  const target = wantsResume // true = resume, false = pause
+  const changed: string[] = []
+  const already: string[] = []
+  for (const s of matched) {
+    const isPaused = !!getSubscriptions().paused[s.id]
+    if (isPaused === !target) {
+      already.push(s.name)
+    } else {
+      setPaused(s.id, !target)
+      changed.push(s.name)
+    }
+  }
+
+  const parts: string[] = []
+  if (changed.length) parts.push(`${target ? 'Resumed' : 'Paused'} ${changed.join(' and ')}.`)
+  if (already.length) parts.push(`${already.join(' and ')} ${already.length > 1 ? 'are' : 'is'} already ${target ? 'active' : 'paused'}.`)
+
+  const total = activeTotal()
+  parts.push(`Active subscriptions now $${total.toFixed(2)} of $${PAYPAL_BALANCE.toFixed(2)}.`)
+  if (total > PAYPAL_BALANCE) {
+    parts.push('That is over your PayPal balance. Consider pausing your lowest priority subscription.')
+  }
+  parts.push('(Demo: simulated, not linked to the real service.)')
+  return parts.join(' ')
 }
 
 type AgentPayload = {
@@ -232,6 +295,18 @@ export function AgentPrompt() {
     setBusy(true)
 
     const lowerCmd = command.toLowerCase()
+
+    // "Pause Spotify" / "resume Netflix": really change the subscriptions
+    const subReply = handleSubscriptionCommand(lowerCmd)
+    if (subReply) {
+      setMessages((prev: Message[]) => [
+        ...prev,
+        { id: userId, role: 'user', text: command, time },
+        { id: agentId, role: 'agent', text: subReply, time, pending: false },
+      ])
+      setBusy(false)
+      return
+    }
 
     // Intent matching
     const isOrderIntent = /\b(order|buy|purchase|check\s?out|checkout)\b/.test(lowerCmd)
