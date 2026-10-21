@@ -128,6 +128,7 @@ export function AgentPrompt() {
   const [mounted, setMounted] = useState(false)
   const [value, setValue] = useState('')
   const [listening, setListening] = useState(false)
+  const [voiceError, setVoiceError] = useState('')
   const [messages, setMessages] = useState<Message[]>(history)
   const [busy, setBusy] = useState(false)
 
@@ -138,6 +139,7 @@ export function AgentPrompt() {
   const streamRef = useRef<HTMLOListElement>(null)
   const idRef = useRef(history.length)
   const requestRef = useRef(0)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -148,25 +150,97 @@ export function AgentPrompt() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
+  // Stop the mic if the component goes away
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.abort()
+      } catch {
+        // ignore
+      }
+    }
+  }, [])
+
   if (!mounted) {
     return null
   }
 
+  // Real voice-to-text using the browser SpeechRecognition API (Chrome, Edge, Safari)
   const handleMicClick = () => {
+    // Tap again while listening = stop
     if (listening) {
-      setListening(false)
+      try {
+        recognitionRef.current?.stop()
+      } catch {
+        // ignore
+      }
       return
     }
-    setListening(true)
-    setTimeout(() => {
-      setValue('Order a pumpkin spice latte from Starbucks')
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) {
+      setVoiceError('Voice input is not supported in this browser. Try Chrome or Edge, or type your command.')
+      return
+    }
+
+    setVoiceError('')
+    const rec = new SR()
+    rec.lang = 'en-US'
+    rec.interimResults = true // show words live while you talk
+    rec.continuous = false // stop on its own after you pause
+    rec.maxAlternatives = 1
+
+    rec.onstart = () => setListening(true)
+
+    rec.onresult = (event: any) => {
+      let transcript = ''
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript
+      }
+      setValue(transcript.trim())
+    }
+
+    rec.onerror = (event: any) => {
+      const code = event?.error
+      if (code === 'aborted') return
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setVoiceError('Microphone is blocked. Allow mic access for this site in your browser, then try again.')
+      } else if (code === 'no-speech') {
+        setVoiceError("Didn't hear anything. Tap the mic and try again.")
+      } else if (code === 'audio-capture') {
+        setVoiceError('No microphone found. Plug one in or check your system settings.')
+      } else if (code === 'network') {
+        setVoiceError('Voice service needs an internet connection. Check your network and try again.')
+      } else {
+        setVoiceError('Voice input failed. Try again or type your command.')
+      }
+    }
+
+    rec.onend = () => {
       setListening(false)
-    }, 2200)
+      recognitionRef.current = null
+    }
+
+    recognitionRef.current = rec
+    try {
+      rec.start()
+    } catch {
+      setListening(false)
+      setVoiceError('Could not start the microphone. Try again.')
+    }
   }
 
   async function submit(commandOverride?: string) {
     const command = (commandOverride ?? value).trim()
     if (!command || busy) return
+
+    // Stop the mic if it is still on
+    try {
+      recognitionRef.current?.stop()
+    } catch {
+      // ignore
+    }
+    setVoiceError('')
 
     const time = nowLabel()
     const userId = ++idRef.current
@@ -449,7 +523,7 @@ export function AgentPrompt() {
           className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
           autoComplete="off"
         />
-        {value.trim() || busy ? (
+        {(value.trim() && !listening) || busy ? (
           <button
             type="submit"
             disabled={busy || !value.trim()}
@@ -480,7 +554,12 @@ export function AgentPrompt() {
         )}
       </form>
 
-      <ul className="relative mt-3 flex flex-wrap gap-2" aria-label="Suggested commands">
+      {/* Voice status and errors, read out by screen readers */}
+      <p role="status" aria-live="polite" className="relative mt-2 min-h-4 text-[11px] text-muted-foreground">
+        {voiceError || (listening ? 'Listening… speak now.' : '')}
+      </p>
+
+      <ul className="relative mt-2 flex flex-wrap gap-2" aria-label="Suggested commands">
         {suggestions.map((s) => (
           <li key={s}>
             <button
@@ -543,7 +622,7 @@ function LiveAgentResult({ payload }: { payload: AgentPayload }) {
         </ul>
       )}
 
-      {payload.actionItems.length > 0 && (
+            {payload.actionItems.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {payload.actionItems.map((item, i) => {
             const a = item as { id?: string; label?: string; type?: string }
