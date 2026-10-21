@@ -39,7 +39,7 @@ export default function Page() {
         </section>
 
         {/* Desktop Grid Layout: Main Chat Stream + Sidebar Widgets */}
-        <main className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3 pb-16">
+        <main className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3 pb-24 lg:pb-16">
           
           {/* Left / Center: Agent Chat Stream */}
           <div className="flex flex-col gap-6 lg:col-span-2">
@@ -74,10 +74,8 @@ export default function Page() {
         </main>
       </div>
 
-      {/* Mobile Only Navigation Bar */}
-      <div className="block lg:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
-        <BottomNav />
-      </div>
+      {/* Mobile Only Navigation Bar (positions and hides itself) */}
+      <BottomNav />
     </div>
   )
 }

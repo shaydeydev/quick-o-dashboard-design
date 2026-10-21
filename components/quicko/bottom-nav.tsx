@@ -83,7 +83,7 @@ export function BottomNav() {
     <>
       <nav
         aria-label="Primary"
-        className="fixed bottom-0 left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden"
+        className="fixed bottom-0 left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden"
       >
         <ul className="glass flex w-full items-center justify-between rounded-full bg-background/70 p-1.5">
           {items.map(({ label, icon: Icon }) => {
@@ -110,7 +110,7 @@ export function BottomNav() {
 
       {/* Interactive Bottom Sheet Modals */}
       {activeModal && (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center md:hidden">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 p-4 backdrop-blur-md sm:items-center lg:hidden">
           <div
             role="dialog"
             aria-modal="true"
