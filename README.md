@@ -154,3 +154,8 @@ Opt-in voice announcements of results, `aria-live` status messages for scanner s
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+### Sandbox Test Login
+If you want to test the checkout and order flow without using real money, you can use our pre-configured PayPal Sandbox account:
+* **Email:** `quickotest@example.com`
+* **Password:** `12345678`
